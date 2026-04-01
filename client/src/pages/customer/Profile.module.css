@@ -1,0 +1,21 @@
+.page { max-width: 700px; display: flex; flex-direction: column; gap: 24px; }
+.profileCard { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; text-align: center; }
+.avatar { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; color: #0a0e1a; margin: 0 auto 12px; }
+.name { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.email { font-size: 14px; color: var(--text-muted); margin-bottom: 16px; }
+.badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+.section h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.input { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text-primary); font-size: 14px; outline: none; }
+.input:focus { border-color: var(--gold); }
+.saveBtn { background: var(--gold); color: #0a0e1a; border: none; border-radius: 8px; padding: 11px; font-weight: 700; font-size: 14px; }
+.saveBtn:disabled { opacity: 0.6; }
+.pointsTotal { font-size: 20px; font-weight: 700; color: var(--gold); margin-bottom: 16px; }
+.pointsTotal span { font-size: 26px; }
+.pointsList { display: flex; flex-direction: column; gap: 8px; }
+.pointsRow { display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.earned { color: var(--success); font-weight: 600; }
+.spent { color: var(--error); font-weight: 600; }

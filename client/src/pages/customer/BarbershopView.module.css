@@ -1,0 +1,202 @@
+.page { max-width: 900px; }
+
+.cover {
+  background: var(--bg-card);
+  background-size: cover;
+  background-position: center;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  min-height: 180px;
+}
+
+.coverOverlay {
+  background: linear-gradient(to right, rgba(10,14,26,0.95), rgba(10,14,26,0.7));
+  padding: 28px;
+}
+
+.shopHeader {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.shopLogo {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.shopLogo img { width: 100%; height: 100%; object-fit: cover; }
+
+.shopName { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+.shopMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.shopMeta span { display: flex; align-items: center; gap: 4px; }
+
+.bookBtn {
+  margin-left: auto;
+  background: var(--gold);
+  color: #0a0e1a;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.body { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+
+.desc { color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin-bottom: 24px; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+
+.tab {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+  text-transform: capitalize;
+}
+
+.tab:hover { color: var(--text-primary); }
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+.catGroup { margin-bottom: 24px; }
+.catTitle { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 12px; }
+
+.serviceList { display: flex; flex-direction: column; gap: 10px; }
+
+.serviceCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  transition: border-color 0.2s;
+}
+.serviceCard:hover { border-color: rgba(212,175,55,0.3); }
+
+.svcImg {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.svcImg img { width: 100%; height: 100%; object-fit: cover; }
+
+.svcInfo { flex: 1; }
+.svcName { font-weight: 600; font-size: 14px; }
+.svcDesc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.svcMeta { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.svcPrice { font-weight: 700; color: var(--gold); font-size: 15px; }
+.svcDuration { font-size: 12px; color: var(--text-muted); }
+
+.bookSvcBtn {
+  background: rgba(212,175,55,0.1);
+  border: 1px solid rgba(212,175,55,0.3);
+  color: var(--gold);
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.bookSvcBtn:hover { background: var(--gold); color: #0a0e1a; }
+
+.barberGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+
+.barberCard {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.barberPhoto {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0a0e1a;
+  overflow: hidden;
+}
+.barberPhoto img { width: 100%; height: 100%; object-fit: cover; }
+
+.barberName { font-weight: 700; font-size: 14px; }
+.barberRating { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #f59e0b; font-weight: 600; }
+.specialties { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.bio { font-size: 12px; color: var(--text-muted); }
+
+.reviews { display: flex; flex-direction: column; gap: 16px; }
+
+.reviewCard {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.reviewHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.reviewAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #0a0e1a;
+  flex-shrink: 0;
+}
+
+.reviewName { font-weight: 600; font-size: 13px; }
+.stars { color: #f59e0b; font-size: 14px; }
+.reviewDate { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.reviewComment { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.reviewBarber { font-size: 12px; color: var(--text-muted); margin-top: 6px; }

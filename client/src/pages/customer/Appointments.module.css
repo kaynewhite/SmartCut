@@ -1,0 +1,38 @@
+.page { max-width: 800px; }
+.header { margin-bottom: 20px; }
+.header h1 { font-size: 26px; font-weight: 700; }
+.filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filterBtn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.filterBtn.active { background: rgba(212,175,55,0.12); border-color: var(--gold); color: var(--gold); }
+.loading, .empty { text-align: center; padding: 60px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.bookBtn { background: var(--gold); color: #0a0e1a; padding: 8px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.list { display: flex; flex-direction: column; gap: 14px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+.cardHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+.shopName { font-weight: 700; font-size: 15px; }
+.shopAddress { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.details { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.detail { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); padding: 5px 10px; border-radius: 6px; }
+.price { font-weight: 700; color: var(--gold); }
+.notes { font-size: 12px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.payBtn { display: flex; align-items: center; gap: 6px; background: var(--gold); color: #0a0e1a; border: none; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.cancelBtn { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--error); padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.rateBtn { display: flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.queueBtn { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 7px 14px; border-radius: 8px; font-size: 13px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.modalCard { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; max-width: 400px; width: 100%; }
+.modalCard h3 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.modalSub { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+.qrImg { width: 100%; max-width: 220px; display: block; margin: 0 auto 16px; border-radius: 10px; }
+.noQr { text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px; }
+.uploadArea { background: var(--bg-secondary); border: 2px dashed var(--border); border-radius: 10px; padding: 16px; text-align: center; margin-bottom: 16px; }
+.uploadLabel { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--gold); font-weight: 600; font-size: 13px; cursor: pointer; }
+.fileName { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.ratingGroup { margin-bottom: 16px; }
+.ratingGroup label { font-size: 13px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px; }
+.starRow { display: flex; gap: 4px; }
+.commentBox { width: 100%; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text-primary); font-size: 13px; outline: none; resize: vertical; margin-bottom: 16px; }
+.modalActions { display: flex; gap: 10px; }
+.submitBtn { flex: 1; background: var(--gold); color: #0a0e1a; border: none; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+.closeBtn2 { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 10px; border-radius: 8px; font-weight: 600; font-size: 14px; }

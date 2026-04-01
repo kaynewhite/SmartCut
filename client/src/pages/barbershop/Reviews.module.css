@@ -1,0 +1,25 @@
+.page { max-width: 800px; }
+.header { margin-bottom: 24px; }
+.header h1 { font-size: 26px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.overview { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; display: flex; gap: 40px; align-items: center; margin-bottom: 24px; flex-wrap: wrap; }
+.bigRating { text-align: center; }
+.bigNum { font-size: 56px; font-weight: 900; color: var(--gold); line-height: 1; }
+.stars { font-size: 22px; color: #f59e0b; margin: 6px 0; }
+.total { font-size: 13px; color: var(--text-muted); }
+.distrib { flex: 1; min-width: 200px; }
+.distribRow { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.distribStars { font-size: 13px; color: #f59e0b; min-width: 36px; }
+.bar { flex: 1; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+.fill { height: 100%; background: #f59e0b; border-radius: 4px; transition: width 0.5s; }
+.distribCount { font-size: 12px; color: var(--text-muted); min-width: 20px; }
+.loading, .empty { text-align: center; padding: 60px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.list { display: flex; flex-direction: column; gap: 14px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+.cardHeader { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0a0e1a; flex-shrink: 0; }
+.reviewerInfo { flex: 1; }
+.reviewerName { font-weight: 600; font-size: 14px; }
+.reviewStars { font-size: 14px; }
+.reviewDate { font-size: 11px; color: var(--text-muted); }
+.comment { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px; }
+.barberReview { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
