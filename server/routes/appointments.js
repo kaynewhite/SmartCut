@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
-const { authenticateCustomer, authenticateBarbershop, authenticate } = require('../middleware/auth');
+const { authenticateCustomer, authenticateBarbershop } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
+const { collection, toObjectId, formatDoc, formatDocs } = require('../db');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
@@ -18,34 +18,49 @@ router.post('/', authenticateCustomer, async (req, res) => {
     return res.status(400).json({ message: 'Missing required fields' });
   }
   try {
-    const service = await pool.query('SELECT price FROM services WHERE id=$1', [service_id]);
-    if (service.rows.length === 0) return res.status(404).json({ message: 'Service not found' });
+    const services = await collection('services');
+    const appointments = await collection('appointments');
+    const notifications = await collection('notifications');
 
-    // Get next queue number for the day
-    const queueRes = await pool.query(
-      `SELECT COALESCE(MAX(queue_number), 0) + 1 as next_queue
-       FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2`,
-      [barbershop_id, appointment_date]
-    );
-    const queue_number = queueRes.rows[0].next_queue;
+    const service = await services.findOne({ _id: toObjectId(service_id) });
+    if (!service) return res.status(404).json({ message: 'Service not found' });
 
-    const result = await pool.query(
-      `INSERT INTO appointments (customer_id, barbershop_id, barber_id, service_id, appointment_date,
-       appointment_time, is_home_service, home_address, notes, total_amount, queue_number)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [req.user.id, barbershop_id, barber_id || null, service_id, appointment_date,
-       appointment_time, is_home_service || false, home_address || null, notes || null,
-       service.rows[0].price, queue_number]
-    );
+    const lastAppointment = await appointments
+      .find({ barbershop_id: toObjectId(barbershop_id), appointment_date })
+      .sort({ queue_number: -1 })
+      .limit(1)
+      .toArray();
+    const queue_number = lastAppointment.length ? lastAppointment[0].queue_number + 1 : 1;
 
-    // Create notification for barbershop
-    await pool.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
-       VALUES ('barbershop', $1, 'New Booking', 'A new appointment has been booked for ${appointment_date}', 'appointment', $2)`,
-      [barbershop_id, result.rows[0].id]
-    );
+    const appointmentDoc = {
+      customer_id: toObjectId(req.user.id),
+      barbershop_id: toObjectId(barbershop_id),
+      barber_id: barber_id ? toObjectId(barber_id) : null,
+      service_id: toObjectId(service_id),
+      appointment_date,
+      appointment_time,
+      is_home_service: !!is_home_service,
+      home_address: home_address || null,
+      notes: notes || null,
+      total_amount: service.price,
+      queue_number,
+      status: 'pending',
+      payment_status: 'pending',
+      created_at: new Date()
+    };
 
-    res.status(201).json(result.rows[0]);
+    const result = await appointments.insertOne(appointmentDoc);
+    await notifications.insertOne({
+      recipient_type: 'barbershop',
+      recipient_id: toObjectId(barbershop_id),
+      title: 'New Booking',
+      message: `A new appointment has been booked for ${appointment_date}`,
+      type: 'appointment',
+      related_id: result.insertedId,
+      created_at: new Date()
+    });
+
+    res.status(201).json({ ...appointmentDoc, id: result.insertedId.toString() });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -55,19 +70,67 @@ router.post('/', authenticateCustomer, async (req, res) => {
 // Get customer appointments
 router.get('/my', authenticateCustomer, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT a.*, b.name as barbershop_name, b.address as barbershop_address, b.logo_url as barbershop_logo,
-              bar.name as barber_name, s.name as service_name, s.price as service_price, s.duration_minutes
-       FROM appointments a
-       JOIN barbershops b ON b.id = a.barbershop_id
-       LEFT JOIN barbers bar ON bar.id = a.barber_id
-       JOIN services s ON s.id = a.service_id
-       WHERE a.customer_id = $1
-       ORDER BY a.appointment_date DESC, a.appointment_time DESC`,
-      [req.user.id]
-    );
-    res.json(result.rows);
+    const appointments = await collection('appointments');
+    const pipeline = [
+      { $match: { customer_id: toObjectId(req.user.id) } },
+      {
+        $lookup: {
+          from: 'barbershops',
+          localField: 'barbershop_id',
+          foreignField: '_id',
+          as: 'barbershop'
+        }
+      },
+      { $unwind: { path: '$barbershop', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'barbers',
+          localField: 'barber_id',
+          foreignField: '_id',
+          as: 'barber'
+        }
+      },
+      { $unwind: { path: '$barber', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'services',
+          localField: 'service_id',
+          foreignField: '_id',
+          as: 'service'
+        }
+      },
+      { $unwind: { path: '$service', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          barbershop_name: '$barbershop.name',
+          barbershop_address: '$barbershop.address',
+          barbershop_logo: '$barbershop.logo_url',
+          barber_name: '$barber.name',
+          service_name: '$service.name',
+          service_price: '$service.price',
+          duration_minutes: '$service.duration_minutes',
+          customer_id: 1,
+          barbershop_id: 1,
+          barber_id: 1,
+          service_id: 1,
+          appointment_date: 1,
+          appointment_time: 1,
+          is_home_service: 1,
+          home_address: 1,
+          notes: 1,
+          total_amount: 1,
+          queue_number: 1,
+          status: 1,
+          payment_status: 1,
+          created_at: 1
+        }
+      },
+      { $sort: { appointment_date: -1, appointment_time: -1 } }
+    ];
+    const items = await appointments.aggregate(pipeline).toArray();
+    res.json(items);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -76,23 +139,61 @@ router.get('/my', authenticateCustomer, async (req, res) => {
 router.get('/barbershop', authenticateBarbershop, async (req, res) => {
   try {
     const { date, status } = req.query;
-    let query = `
-      SELECT a.*, c.name as customer_name, c.phone as customer_phone,
-             bar.name as barber_name, s.name as service_name, s.duration_minutes
-      FROM appointments a
-      JOIN customers c ON c.id = a.customer_id
-      LEFT JOIN barbers bar ON bar.id = a.barber_id
-      JOIN services s ON s.id = a.service_id
-      WHERE a.barbershop_id = $1
-    `;
-    const params = [req.user.id];
-    let idx = 2;
-    if (date) { query += ` AND a.appointment_date = $${idx++}`; params.push(date); }
-    if (status) { query += ` AND a.status = $${idx++}`; params.push(status); }
-    query += ' ORDER BY a.appointment_date, a.appointment_time';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const appointments = await collection('appointments');
+    const match = { barbershop_id: toObjectId(req.user.id) };
+    if (date) match.appointment_date = date;
+    if (status) match.status = status;
+
+    const pipeline = [
+      { $match: match },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customer_id',
+          foreignField: '_id',
+          as: 'customer'
+        }
+      },
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'barbers',
+          localField: 'barber_id',
+          foreignField: '_id',
+          as: 'barber'
+        }
+      },
+      { $unwind: { path: '$barber', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'services',
+          localField: 'service_id',
+          foreignField: '_id',
+          as: 'service'
+        }
+      },
+      { $unwind: { path: '$service', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          customer_name: '$customer.name',
+          customer_phone: '$customer.phone',
+          barber_name: '$barber.name',
+          service_name: '$service.name',
+          duration_minutes: '$service.duration_minutes',
+          appointment_date: 1,
+          appointment_time: 1,
+          status: 1,
+          payment_status: 1,
+          queue_number: 1,
+          created_at: 1
+        }
+      },
+      { $sort: { appointment_date: 1, appointment_time: 1 } }
+    ];
+    const items = await appointments.aggregate(pipeline).toArray();
+    res.json(items);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -103,16 +204,18 @@ router.patch('/:id/status', authenticateBarbershop, async (req, res) => {
   const validStatuses = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show'];
   if (!validStatuses.includes(status)) return res.status(400).json({ message: 'Invalid status' });
   try {
-    const appt = await pool.query('SELECT * FROM appointments WHERE id=$1 AND barbershop_id=$2', [req.params.id, req.user.id]);
-    if (appt.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    const appointments = await collection('appointments');
+    const customers = await collection('customers');
+    const notifications = await collection('notifications');
+    const appt = await appointments.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
+    if (!appt) return res.status(404).json({ message: 'Not found' });
 
-    await pool.query('UPDATE appointments SET status=$1 WHERE id=$2', [status, req.params.id]);
+    await appointments.updateOne({ _id: appt._id }, { $set: { status } });
 
     if (status === 'no_show') {
-      await pool.query('UPDATE customers SET no_show_count = no_show_count + 1 WHERE id=$1', [appt.rows[0].customer_id]);
+      await customers.updateOne({ _id: toObjectId(appt.customer_id) }, { $inc: { no_show_count: 1 } });
     }
 
-    // Notify customer
     const statusMsgs = {
       confirmed: 'Your appointment has been confirmed!',
       cancelled: 'Your appointment has been cancelled.',
@@ -120,15 +223,20 @@ router.patch('/:id/status', authenticateBarbershop, async (req, res) => {
       in_progress: "Your appointment is now in progress — you're next!"
     };
     if (statusMsgs[status]) {
-      await pool.query(
-        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
-         VALUES ('customer', $1, $2, $3, 'appointment', $4)`,
-        [appt.rows[0].customer_id, 'Appointment Update', statusMsgs[status], req.params.id]
-      );
+      await notifications.insertOne({
+        recipient_type: 'customer',
+        recipient_id: appt.customer_id,
+        title: 'Appointment Update',
+        message: statusMsgs[status],
+        type: 'appointment',
+        related_id: appt._id,
+        created_at: new Date()
+      });
     }
 
     res.json({ message: 'Updated' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -136,14 +244,16 @@ router.patch('/:id/status', authenticateBarbershop, async (req, res) => {
 // Cancel appointment (customer)
 router.patch('/:id/cancel', authenticateCustomer, async (req, res) => {
   try {
-    const appt = await pool.query('SELECT * FROM appointments WHERE id=$1 AND customer_id=$2', [req.params.id, req.user.id]);
-    if (appt.rows.length === 0) return res.status(404).json({ message: 'Not found' });
-    if (!['pending', 'confirmed'].includes(appt.rows[0].status)) {
+    const appointments = await collection('appointments');
+    const appt = await appointments.findOne({ _id: toObjectId(req.params.id), customer_id: toObjectId(req.user.id) });
+    if (!appt) return res.status(404).json({ message: 'Not found' });
+    if (!['pending', 'confirmed'].includes(appt.status)) {
       return res.status(400).json({ message: 'Cannot cancel this appointment' });
     }
-    await pool.query("UPDATE appointments SET status='cancelled' WHERE id=$1", [req.params.id]);
+    await appointments.updateOne({ _id: appt._id }, { $set: { status: 'cancelled' } });
     res.json({ message: 'Cancelled' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -152,18 +262,24 @@ router.patch('/:id/cancel', authenticateCustomer, async (req, res) => {
 router.post('/:id/payment-proof', authenticateCustomer, upload.single('proof'), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   try {
-    const appt = await pool.query('SELECT * FROM appointments WHERE id=$1 AND customer_id=$2', [req.params.id, req.user.id]);
-    if (appt.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    const appointments = await collection('appointments');
+    const notifications = await collection('notifications');
+    const appt = await appointments.findOne({ _id: toObjectId(req.params.id), customer_id: toObjectId(req.user.id) });
+    if (!appt) return res.status(404).json({ message: 'Not found' });
     const url = `/uploads/${req.file.filename}`;
-    await pool.query("UPDATE appointments SET payment_proof_url=$1, payment_status='pending_verification' WHERE id=$2", [url, req.params.id]);
-    // Notify barbershop
-    await pool.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
-       VALUES ('barbershop', $1, 'Payment Proof Submitted', 'A customer has submitted payment proof for an appointment.', 'payment', $2)`,
-      [appt.rows[0].barbershop_id, req.params.id]
-    );
+    await appointments.updateOne({ _id: appt._id }, { $set: { payment_proof_url: url, payment_status: 'pending_verification' } });
+    await notifications.insertOne({
+      recipient_type: 'barbershop',
+      recipient_id: appt.barbershop_id,
+      title: 'Payment Proof Submitted',
+      message: 'A customer has submitted payment proof for an appointment.',
+      type: 'payment',
+      related_id: appt._id,
+      created_at: new Date()
+    });
     res.json({ payment_proof_url: url });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -172,19 +288,26 @@ router.post('/:id/payment-proof', authenticateCustomer, upload.single('proof'), 
 router.patch('/:id/verify-payment', authenticateBarbershop, async (req, res) => {
   const { approved } = req.body;
   try {
-    const appt = await pool.query('SELECT * FROM appointments WHERE id=$1 AND barbershop_id=$2', [req.params.id, req.user.id]);
-    if (appt.rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    const appointments = await collection('appointments');
+    const notifications = await collection('notifications');
+    const appt = await appointments.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
+    if (!appt) return res.status(404).json({ message: 'Not found' });
     const newStatus = approved ? 'paid' : 'unpaid';
-    await pool.query("UPDATE appointments SET payment_status=$1 WHERE id=$2", [newStatus, req.params.id]);
+    await appointments.updateOne({ _id: appt._id }, { $set: { payment_status: newStatus } });
     if (approved) {
-      await pool.query(
-        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
-         VALUES ('customer', $1, 'Payment Confirmed', 'Your payment has been verified. See you at your appointment!', 'payment', $2)`,
-        [appt.rows[0].customer_id, req.params.id]
-      );
+      await notifications.insertOne({
+        recipient_type: 'customer',
+        recipient_id: appt.customer_id,
+        title: 'Payment Confirmed',
+        message: 'Your payment has been verified. See you at your appointment!',
+        type: 'payment',
+        related_id: appt._id,
+        created_at: new Date()
+      });
     }
     res.json({ message: 'Payment status updated' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -194,13 +317,18 @@ router.get('/available-slots', async (req, res) => {
   const { barbershop_id, barber_id, date } = req.query;
   if (!barbershop_id || !date) return res.status(400).json({ message: 'Missing params' });
   try {
-    let query = `SELECT appointment_time FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND status NOT IN ('cancelled','no_show')`;
-    const params = [barbershop_id, date];
-    if (barber_id) { query += ' AND barber_id=$3'; params.push(barber_id); }
-    const result = await pool.query(query, params);
-    const booked = result.rows.map(r => r.appointment_time.substring(0, 5));
+    const appointments = await collection('appointments');
+    const match = {
+      barbershop_id: toObjectId(barbershop_id),
+      appointment_date: date,
+      status: { $nin: ['cancelled', 'no_show'] }
+    };
+    if (barber_id) match.barber_id = toObjectId(barber_id);
+    const bookedDocs = await appointments.find(match).toArray();
+    const booked = bookedDocs.map((r) => (typeof r.appointment_time === 'string' ? r.appointment_time.substring(0, 5) : r.appointment_time));
     res.json({ booked_slots: booked });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
-const { authenticateBarbershop, authenticate } = require('../middleware/auth');
+const { authenticateBarbershop } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { collection, toObjectId, formatDoc, formatDocs } = require('../db');
 
 const uploadDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -18,23 +18,36 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 // Get all barbershops (public, for recommendation/explore)
 router.get('/', async (req, res) => {
   try {
-    const { city, service, minPrice, maxPrice, search } = req.query;
-    let query = `
-      SELECT b.id, b.name, b.address, b.city, b.description, b.logo_url, b.cover_url,
-             b.opening_time, b.closing_time, b.is_active,
-             COALESCE(AVG(r.barbershop_rating), 0) as avg_rating,
-             COUNT(DISTINCT r.id) as review_count
-      FROM barbershops b
-      LEFT JOIN ratings r ON r.barbershop_id = b.id
-      WHERE b.is_active = true
-    `;
-    const params = [];
-    let idx = 1;
-    if (city) { query += ` AND LOWER(b.city) LIKE LOWER($${idx++})`; params.push(`%${city}%`); }
-    if (search) { query += ` AND (LOWER(b.name) LIKE LOWER($${idx++}) OR LOWER(b.description) LIKE LOWER($${idx++}))`; params.push(`%${search}%`, `%${search}%`); }
-    query += ` GROUP BY b.id ORDER BY avg_rating DESC`;
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const { city, service, maxPrice, search } = req.query;
+    const shops = await collection('barbershops');
+    const match = { is_active: true };
+    if (city) match.city = { $regex: city, $options: 'i' };
+    if (search) match.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } }
+    ];
+
+    const pipeline = [
+      { $match: match },
+      {
+        $lookup: {
+          from: 'ratings',
+          localField: '_id',
+          foreignField: 'barbershop_id',
+          as: 'ratings'
+        }
+      },
+      {
+        $addFields: {
+          avg_rating: { $ifNull: [{ $avg: '$ratings.barbershop_rating' }, 0] },
+          review_count: { $size: '$ratings' }
+        }
+      },
+      { $sort: { avg_rating: -1 } }
+    ];
+
+    const items = await shops.aggregate(pipeline).toArray();
+    res.json(formatDocs(items));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -44,35 +57,78 @@ router.get('/', async (req, res) => {
 // Get single barbershop (public)
 router.get('/:id', async (req, res) => {
   try {
-    const shop = await pool.query(
-      `SELECT b.*, COALESCE(AVG(r.barbershop_rating), 0) as avg_rating, COUNT(DISTINCT r.id) as review_count
-       FROM barbershops b LEFT JOIN ratings r ON r.barbershop_id = b.id
-       WHERE b.id = $1 GROUP BY b.id`,
-      [req.params.id]
-    );
-    if (shop.rows.length === 0) return res.status(404).json({ message: 'Not found' });
-    const barbers = await pool.query(
-      `SELECT bar.*, COALESCE(AVG(r.barber_rating), 0) as avg_rating,
-              ARRAY_AGG(bs.specialty) FILTER (WHERE bs.specialty IS NOT NULL) as specialties
-       FROM barbers bar
-       LEFT JOIN ratings r ON r.barber_id = bar.id
-       LEFT JOIN barber_specialties bs ON bs.barber_id = bar.id
-       WHERE bar.barbershop_id = $1
-       GROUP BY bar.id ORDER BY bar.name`,
-      [req.params.id]
-    );
-    const services = await pool.query(
-      'SELECT * FROM services WHERE barbershop_id = $1 AND is_active = true ORDER BY category, name',
-      [req.params.id]
-    );
-    const reviews = await pool.query(
-      `SELECT r.*, c.name as customer_name FROM ratings r
-       JOIN customers c ON c.id = r.customer_id
-       WHERE r.barbershop_id = $1 ORDER BY r.created_at DESC LIMIT 10`,
-      [req.params.id]
-    );
-    const { password: _, ...shopSafe } = shop.rows[0];
-    res.json({ shop: shopSafe, barbers: barbers.rows, services: services.rows, reviews: reviews.rows });
+    const shops = await collection('barbershops');
+    const barbers = await collection('barbers');
+    const services = await collection('services');
+    const ratings = await collection('ratings');
+
+    const shop = await shops.findOne({ _id: toObjectId(req.params.id) });
+    if (!shop) return res.status(404).json({ message: 'Not found' });
+
+    const barbersData = await barbers.aggregate([
+      { $match: { barbershop_id: shop._id } },
+      {
+        $lookup: {
+          from: 'ratings',
+          localField: '_id',
+          foreignField: 'barber_id',
+          as: 'ratings'
+        }
+      },
+      {
+        $lookup: {
+          from: 'barber_specialties',
+          localField: '_id',
+          foreignField: 'barber_id',
+          as: 'specialties'
+        }
+      },
+      {
+        $addFields: {
+          avg_rating: { $ifNull: [{ $avg: '$ratings.barber_rating' }, 0] },
+          specialties: { $setUnion: [[], '$specialties.specialty'] }
+        }
+      },
+      { $sort: { name: 1 } }
+    ]).toArray();
+
+    const servicesData = await services
+      .find({ barbershop_id: shop._id, is_active: true })
+      .sort({ category: 1, name: 1 })
+      .toArray();
+
+    const reviewsData = await ratings.aggregate([
+      { $match: { barbershop_id: shop._id } },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customer_id',
+          foreignField: '_id',
+          as: 'customer'
+        }
+      },
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+      { $sort: { created_at: -1 } },
+      { $limit: 10 },
+      {
+        $project: {
+          customer_name: '$customer.name',
+          barbershop_id: 1,
+          barber_id: 1,
+          appointment_id: 1,
+          barbershop_rating: 1,
+          barber_rating: 1,
+          comment: 1,
+          created_at: 1
+        }
+      }
+    ]).toArray();
+
+    const shopSafe = { ...shop, id: shop._id.toString() };
+    delete shopSafe._id;
+    delete shopSafe.password;
+
+    res.json({ shop: shopSafe, barbers: formatDocs(barbersData), services: formatDocs(servicesData), reviews: formatDocs(reviewsData) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -82,29 +138,40 @@ router.get('/:id', async (req, res) => {
 // Get my barbershop profile
 router.get('/me/profile', authenticateBarbershop, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM barbershops WHERE id=$1', [req.user.id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: 'Not found' });
-    const { password: _, ...shopSafe } = result.rows[0];
-    res.json(shopSafe);
+    const shops = await collection('barbershops');
+    const shop = await shops.findOne({ _id: toObjectId(req.user.id) }, { projection: { password: 0 } });
+    if (!shop) return res.status(404).json({ message: 'Not found' });
+    res.json(formatDoc(shop));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
 // Update barbershop profile
 router.put('/me/profile', authenticateBarbershop, async (req, res) => {
-  const { name, phone, address, city, description, opening_time, closing_time } = req.body;
+  const { name, phone, address, city, description, opening_time, closing_time, latitude, longitude } = req.body;
   try {
-    const result = await pool.query(
-      `UPDATE barbershops SET name=COALESCE($1,name), phone=COALESCE($2,phone),
-       address=COALESCE($3,address), city=COALESCE($4,city), description=COALESCE($5,description),
-       opening_time=COALESCE($6,opening_time), closing_time=COALESCE($7,closing_time)
-       WHERE id=$8 RETURNING *`,
-      [name, phone, address, city, description, opening_time, closing_time, req.user.id]
+    const shops = await collection('barbershops');
+    const update = {
+      ...(name !== undefined ? { name } : {}),
+      ...(phone !== undefined ? { phone } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(city !== undefined ? { city } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(opening_time !== undefined ? { opening_time } : {}),
+      ...(closing_time !== undefined ? { closing_time } : {}),
+      ...(latitude !== undefined ? { latitude: parseFloat(latitude) } : {}),
+      ...(longitude !== undefined ? { longitude: parseFloat(longitude) } : {})
+    };
+    const result = await shops.findOneAndUpdate(
+      { _id: toObjectId(req.user.id) },
+      { $set: update },
+      { returnDocument: 'after', projection: { password: 0 } }
     );
-    const { password: _, ...shopSafe } = result.rows[0];
-    res.json(shopSafe);
+    res.json(formatDoc(result.value));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -114,9 +181,11 @@ router.post('/me/qr-code', authenticateBarbershop, upload.single('qr_code'), asy
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   const url = `/uploads/${req.file.filename}`;
   try {
-    await pool.query('UPDATE barbershops SET qr_code_url=$1 WHERE id=$2', [url, req.user.id]);
+    const shops = await collection('barbershops');
+    await shops.updateOne({ _id: toObjectId(req.user.id) }, { $set: { qr_code_url: url } });
     res.json({ qr_code_url: url });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -126,9 +195,11 @@ router.post('/me/logo', authenticateBarbershop, upload.single('logo'), async (re
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   const url = `/uploads/${req.file.filename}`;
   try {
-    await pool.query('UPDATE barbershops SET logo_url=$1 WHERE id=$2', [url, req.user.id]);
+    const shops = await collection('barbershops');
+    await shops.updateOne({ _id: toObjectId(req.user.id) }, { $set: { logo_url: url } });
     res.json({ logo_url: url });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -138,9 +209,11 @@ router.post('/me/cover', authenticateBarbershop, upload.single('cover'), async (
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   const url = `/uploads/${req.file.filename}`;
   try {
-    await pool.query('UPDATE barbershops SET cover_url=$1 WHERE id=$2', [url, req.user.id]);
+    const shops = await collection('barbershops');
+    await shops.updateOne({ _id: toObjectId(req.user.id) }, { $set: { cover_url: url } });
     res.json({ cover_url: url });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -148,53 +221,81 @@ router.post('/me/cover', authenticateBarbershop, upload.single('cover'), async (
 // Dashboard stats
 router.get('/me/dashboard', authenticateBarbershop, async (req, res) => {
   try {
-    const shopId = req.user.id;
-    const today = new Date().toISOString().split('T')[0];
+    const shopId = toObjectId(req.user.id);
+    const appointments = await collection('appointments');
+    const ratings = await collection('ratings');
+    const walkIns = await collection('walk_ins');
 
-    const totalToday = await pool.query(
-      `SELECT COUNT(*) FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND status != 'cancelled'`,
-      [shopId, today]
-    );
-    const totalRevenue = await pool.query(
-      `SELECT COALESCE(SUM(total_amount),0) as revenue FROM appointments WHERE barbershop_id=$1 AND payment_status='paid'`,
-      [shopId]
-    );
-    const avgRating = await pool.query(
-      `SELECT COALESCE(AVG(barbershop_rating),0) as avg FROM ratings WHERE barbershop_id=$1`,
-      [shopId]
-    );
-    const topServices = await pool.query(
-      `SELECT s.name, COUNT(a.id) as count FROM appointments a JOIN services s ON s.id=a.service_id
-       WHERE a.barbershop_id=$1 GROUP BY s.name ORDER BY count DESC LIMIT 5`,
-      [shopId]
-    );
-    const peakHours = await pool.query(
-      `SELECT EXTRACT(HOUR FROM appointment_time) as hour, COUNT(*) as count
-       FROM appointments WHERE barbershop_id=$1 AND status != 'cancelled'
-       GROUP BY hour ORDER BY hour`,
-      [shopId]
-    );
-    const monthlyRevenue = await pool.query(
-      `SELECT TO_CHAR(appointment_date, 'Mon') as month, COALESCE(SUM(total_amount),0) as revenue
-       FROM appointments WHERE barbershop_id=$1 AND payment_status='paid'
-       AND appointment_date >= NOW() - INTERVAL '6 months'
-       GROUP BY TO_CHAR(appointment_date, 'Mon'), DATE_TRUNC('month', appointment_date)
-       ORDER BY DATE_TRUNC('month', appointment_date)`,
-      [shopId]
-    );
-    const queueCount = await pool.query(
-      `SELECT COUNT(*) FROM walk_ins WHERE barbershop_id=$1 AND status='waiting'`,
-      [shopId]
-    );
+    const today = new Date().toISOString().split('T')[0];
+    const totalToday = await appointments.countDocuments({ barbershop_id: shopId, appointment_date: today, status: { $ne: 'cancelled' } });
+
+    const totalRevenueResult = await appointments.aggregate([
+      { $match: { barbershop_id: shopId, payment_status: 'paid' } },
+      { $group: { _id: null, revenue: { $sum: '$total_amount' } } }
+    ]).toArray();
+    const totalRevenue = totalRevenueResult[0]?.revenue || 0;
+
+    const avgRatingResult = await ratings.aggregate([
+      { $match: { barbershop_id: shopId } },
+      { $group: { _id: null, avg: { $avg: '$barbershop_rating' } } }
+    ]).toArray();
+    const avgRating = avgRatingResult[0]?.avg || 0;
+
+    const topServices = await appointments.aggregate([
+      { $match: { barbershop_id: shopId } },
+      {
+        $lookup: {
+          from: 'services',
+          localField: 'service_id',
+          foreignField: '_id',
+          as: 'service'
+        }
+      },
+      { $unwind: { path: '$service', preserveNullAndEmptyArrays: true } },
+      { $group: { _id: '$service.name', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      { $project: { name: '$_id', count: 1, _id: 0 } }
+    ]).toArray();
+
+    const peakHours = await appointments.aggregate([
+      { $match: { barbershop_id: shopId, status: { $ne: 'cancelled' } } },
+      { $project: { hour: { $toInt: { $substr: ['$appointment_time', 0, 2] } } } },
+      { $group: { _id: '$hour', count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+      { $project: { hour: '$_id', count: 1, _id: 0 } }
+    ]).toArray();
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const monthlyRevenue = await appointments.aggregate([
+      {
+        $addFields: {
+          appointmentDate: { $dateFromString: { dateString: '$appointment_date' } }
+        }
+      },
+      { $match: { barbershop_id: shopId, payment_status: 'paid', appointmentDate: { $gte: sixMonthsAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%b', date: '$appointmentDate' } },
+          revenue: { $sum: '$total_amount' },
+          monthSort: { $min: '$appointmentDate' }
+        }
+      },
+      { $sort: { monthSort: 1 } },
+      { $project: { month: '$_id', revenue: 1, _id: 0 } }
+    ]).toArray();
+
+    const queueCount = await walkIns.countDocuments({ barbershop_id: shopId, status: 'waiting' });
 
     res.json({
-      today_appointments: parseInt(totalToday.rows[0].count),
-      total_revenue: parseFloat(totalRevenue.rows[0].revenue),
-      avg_rating: parseFloat(avgRating.rows[0].avg).toFixed(1),
-      top_services: topServices.rows,
-      peak_hours: peakHours.rows,
-      monthly_revenue: monthlyRevenue.rows,
-      queue_count: parseInt(queueCount.rows[0].count)
+      today_appointments: totalToday,
+      total_revenue: totalRevenue,
+      avg_rating: parseFloat(avgRating).toFixed(1),
+      top_services: topServices,
+      peak_hours: peakHours,
+      monthly_revenue: monthlyRevenue,
+      queue_count: queueCount
     });
   } catch (err) {
     console.error(err);

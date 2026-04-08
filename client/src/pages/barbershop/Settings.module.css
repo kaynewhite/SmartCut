@@ -20,4 +20,7 @@
 .logoPreview { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; }
 .uploadPlaceholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; padding: 20px; background: var(--bg-secondary); border-radius: 10px; width: 100%; }
 .uploadBtn { display: flex; align-items: center; gap: 6px; background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3); color: var(--gold); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
-@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+.mapSection { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
+.mapSection h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.locationInfo { margin-top: 8px; padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px; }
+.locationInfo small { color: var(--text-muted); }

@@ -1,17 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const { collection, toObjectId, formatDocs } = require('../db');
 const { authenticate } = require('../middleware/auth');
 
 // Get notifications
 router.get('/', authenticate, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM notifications WHERE recipient_type=$1 AND recipient_id=$2 ORDER BY created_at DESC LIMIT 50`,
-      [req.user.type, req.user.id]
-    );
-    res.json(result.rows);
+    const notifications = await collection('notifications');
+    const items = await notifications
+      .find({ recipient_type: req.user.type, recipient_id: req.user.id })
+      .sort({ created_at: -1 })
+      .limit(50)
+      .toArray();
+    res.json(formatDocs(items));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -19,12 +22,14 @@ router.get('/', authenticate, async (req, res) => {
 // Mark as read
 router.patch('/:id/read', authenticate, async (req, res) => {
   try {
-    await pool.query(
-      'UPDATE notifications SET is_read=true WHERE id=$1 AND recipient_type=$2 AND recipient_id=$3',
-      [req.params.id, req.user.type, req.user.id]
+    const notifications = await collection('notifications');
+    await notifications.updateOne(
+      { _id: toObjectId(req.params.id), recipient_type: req.user.type, recipient_id: req.user.id },
+      { $set: { is_read: true } }
     );
     res.json({ message: 'Marked as read' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -32,12 +37,14 @@ router.patch('/:id/read', authenticate, async (req, res) => {
 // Mark all as read
 router.patch('/read-all', authenticate, async (req, res) => {
   try {
-    await pool.query(
-      'UPDATE notifications SET is_read=true WHERE recipient_type=$1 AND recipient_id=$2',
-      [req.user.type, req.user.id]
+    const notifications = await collection('notifications');
+    await notifications.updateMany(
+      { recipient_type: req.user.type, recipient_id: req.user.id },
+      { $set: { is_read: true } }
     );
     res.json({ message: 'All marked as read' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });

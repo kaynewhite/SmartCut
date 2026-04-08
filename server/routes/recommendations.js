@@ -1,62 +1,66 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const { collection, toObjectId, formatDocs } = require('../db');
 
 // Recommendation system
 // Parameters: specialty, ratings, availability, location, price
 router.get('/', async (req, res) => {
-  const { specialty, max_price, city, service_type, date, time } = req.query;
+  const { specialty, max_price, city, service_type } = req.query;
   try {
-    let query = `
-      SELECT DISTINCT b.id, b.name, b.address, b.city, b.description, b.logo_url,
-             b.opening_time, b.closing_time,
-             COALESCE(AVG(r.barbershop_rating), 0) as avg_rating,
-             COUNT(DISTINCT r.id) as review_count,
-             MIN(s.price) as min_price,
-             MAX(s.price) as max_price
-      FROM barbershops b
-      LEFT JOIN ratings r ON r.barbershop_id = b.id
-      LEFT JOIN services s ON s.barbershop_id = b.id AND s.is_active = true
-      LEFT JOIN barbers bar ON bar.barbershop_id = b.id
-      LEFT JOIN barber_specialties bs ON bs.barber_id = bar.id
-      WHERE b.is_active = true
-    `;
-    const params = [];
-    let idx = 1;
-
-    if (city) {
-      query += ` AND LOWER(b.city) LIKE LOWER($${idx++})`;
-      params.push(`%${city}%`);
-    }
-    if (max_price) {
-      query += ` AND s.price <= $${idx++}`;
-      params.push(max_price);
-    }
-    if (specialty) {
-      query += ` AND LOWER(bs.specialty) LIKE LOWER($${idx++})`;
-      params.push(`%${specialty}%`);
-    }
+    const shops = await collection('barbershops');
+    const match = { is_active: true };
+    if (city) match.city = { $regex: city, $options: 'i' };
     if (service_type) {
-      query += ` AND (LOWER(s.name) LIKE LOWER($${idx++}) OR LOWER(s.category) LIKE LOWER($${idx++}))`;
-      params.push(`%${service_type}%`, `%${service_type}%`);
+      match.$or = [
+        { name: { $regex: service_type, $options: 'i' } },
+        { description: { $regex: service_type, $options: 'i' } }
+      ];
     }
 
-    query += ` GROUP BY b.id ORDER BY avg_rating DESC, review_count DESC LIMIT 20`;
+    const pipeline = [
+      { $match: match },
+      {
+        $lookup: {
+          from: 'ratings',
+          localField: '_id',
+          foreignField: 'barbershop_id',
+          as: 'ratings'
+        }
+      },
+      {
+        $lookup: {
+          from: 'services',
+          localField: '_id',
+          foreignField: 'barbershop_id',
+          as: 'services'
+        }
+      },
+      {
+        $addFields: {
+          avg_rating: { $ifNull: [{ $avg: '$ratings.barbershop_rating' }, 0] },
+          review_count: { $size: '$ratings' },
+          min_price: { $min: '$services.price' },
+          max_price: { $max: '$services.price' }
+        }
+      }
+    ];
 
-    const result = await pool.query(query, params);
+    if (max_price) {
+      pipeline.push({ $match: { min_price: { $lte: parseFloat(max_price) } } });
+    }
 
-    // Score and sort by all parameters
-    const scored = result.rows.map(shop => {
+    const result = await shops.aggregate(pipeline).toArray();
+    const scored = result.map((shop) => {
       let score = 0;
-      score += parseFloat(shop.avg_rating) * 20; // ratings weight: 20
-      if (city && shop.city?.toLowerCase().includes(city.toLowerCase())) score += 30; // location weight: 30
-      if (max_price && shop.min_price <= max_price) score += 15; // price weight: 15
-      score += Math.min(parseInt(shop.review_count), 50); // reviews bonus
+      score += parseFloat(shop.avg_rating || 0) * 20;
+      if (city && shop.city?.toLowerCase().includes(city.toLowerCase())) score += 30;
+      if (max_price && shop.min_price <= parseFloat(max_price)) score += 15;
+      score += Math.min(parseInt(shop.review_count || 0), 50);
       return { ...shop, score };
     });
 
     scored.sort((a, b) => b.score - a.score);
-    res.json(scored);
+    res.json(formatDocs(scored));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -67,31 +71,58 @@ router.get('/', async (req, res) => {
 router.get('/barbers', async (req, res) => {
   const { specialty, barbershop_id } = req.query;
   try {
-    let query = `
-      SELECT bar.*, b.name as barbershop_name, b.address as barbershop_address,
-             COALESCE(AVG(r.barber_rating), 0) as avg_rating,
-             COUNT(DISTINCT r.id) as review_count,
-             ARRAY_AGG(DISTINCT bs.specialty) FILTER (WHERE bs.specialty IS NOT NULL) as specialties
-      FROM barbers bar
-      JOIN barbershops b ON b.id = bar.barbershop_id
-      LEFT JOIN ratings r ON r.barber_id = bar.id
-      LEFT JOIN barber_specialties bs ON bs.barber_id = bar.id
-      WHERE b.is_active = true AND bar.is_available = true
-    `;
-    const params = [];
-    let idx = 1;
+    const barbers = await collection('barbers');
+    const match = { is_available: true };
+    if (barbershop_id) match.barbershop_id = toObjectId(barbershop_id);
+
+    const pipeline = [
+      { $match: match },
+      {
+        $lookup: {
+          from: 'barbershops',
+          localField: 'barbershop_id',
+          foreignField: '_id',
+          as: 'barbershop'
+        }
+      },
+      { $unwind: { path: '$barbershop', preserveNullAndEmptyArrays: true } },
+      { $match: { 'barbershop.is_active': true } },
+      {
+        $lookup: {
+          from: 'ratings',
+          localField: '_id',
+          foreignField: 'barber_id',
+          as: 'ratings'
+        }
+      },
+      {
+        $lookup: {
+          from: 'barber_specialties',
+          localField: '_id',
+          foreignField: 'barber_id',
+          as: 'specialties'
+        }
+      },
+      {
+        $addFields: {
+          avg_rating: { $ifNull: [{ $avg: '$ratings.barber_rating' }, 0] },
+          review_count: { $size: '$ratings' },
+          specialties: { $setUnion: [[], '$specialties.specialty'] },
+          barbershop_name: '$barbershop.name',
+          barbershop_address: '$barbershop.address'
+        }
+      }
+    ];
+
     if (specialty) {
-      query += ` AND LOWER(bs.specialty) LIKE LOWER($${idx++})`;
-      params.push(`%${specialty}%`);
+      pipeline.push({ $match: { specialties: { $elemMatch: { $regex: specialty, $options: 'i' } } } });
     }
-    if (barbershop_id) {
-      query += ` AND bar.barbershop_id = $${idx++}`;
-      params.push(barbershop_id);
-    }
-    query += ` GROUP BY bar.id, b.id ORDER BY avg_rating DESC LIMIT 20`;
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+
+    pipeline.push({ $sort: { avg_rating: -1 } }, { $limit: 20 });
+    const result = await barbers.aggregate(pipeline).toArray();
+    res.json(formatDocs(result));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });

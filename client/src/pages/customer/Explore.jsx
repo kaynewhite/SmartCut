@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
-import { Search, Star, MapPin, Scissors } from 'lucide-react';
+import Map from '../../components/Map';
+import { Search, Star, MapPin, Scissors, List, MapIcon } from 'lucide-react';
 import styles from './Explore.module.css';
 
 export default function CustomerExplore() {
+  const navigate = useNavigate();
   const [shops, setShops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [city, setCity] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [view, setView] = useState('list'); // 'list' or 'map'
 
   const fetchShops = async () => {
     setLoading(true);
@@ -61,10 +64,34 @@ export default function CustomerExplore() {
           </div>
         </form>
 
+        <div className={styles.viewToggle}>
+          <button className={`${styles.viewBtn} ${view === 'list' ? styles.active : ''}`} onClick={() => setView('list')}>
+            <List size={16} /> List
+          </button>
+          <button className={`${styles.viewBtn} ${view === 'map' ? styles.active : ''}`} onClick={() => setView('map')}>
+            <MapIcon size={16} /> Map
+          </button>
+        </div>
+
         {loading ? (
           <div className={styles.loading}><Scissors size={32} color="#374151" /><p>Finding barbershops...</p></div>
         ) : shops.length === 0 ? (
           <div className={styles.empty}><Scissors size={40} color="#374151" /><p>No barbershops found. Try adjusting your search.</p></div>
+        ) : view === 'map' ? (
+          <div className={styles.mapContainer}>
+            <Map
+              markers={shops.filter(shop => shop.latitude && shop.longitude).map(shop => ({
+                id: shop.id,
+                name: shop.name,
+                address: shop.address,
+                city: shop.city,
+                latitude: shop.latitude,
+                longitude: shop.longitude
+              }))}
+              height="600px"
+              onMarkerClick={(marker) => navigate(`/customer/barbershop/${marker.id}`)}
+            />
+          </div>
         ) : (
           <div className={styles.grid}>
             {shops.map(shop => (

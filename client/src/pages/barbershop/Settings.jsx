@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
+import Map from '../../components/Map';
 import toast from 'react-hot-toast';
-import { Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react';
+import { Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight, ChevronDown, MapPin } from 'lucide-react';
 import styles from './Settings.module.css';
 
 const PH_PAYMENT_TYPES = [
@@ -24,8 +25,9 @@ const PM_COLORS = {
 
 export default function BarbershopSettings() {
   const [shop, setShop] = useState(null);
-  const [form, setForm] = useState({ name:'', phone:'', address:'', city:'', description:'', opening_time:'08:00', closing_time:'20:00' });
+  const [form, setForm] = useState({ name:'', phone:'', address:'', city:'', description:'', opening_time:'08:00', closing_time:'20:00', latitude: null, longitude: null });
   const [saving, setSaving] = useState(false);
+  const [location, setLocation] = useState(null);
 
   const [payMethods, setPayMethods] = useState([]);
   const [addModal, setAddModal] = useState(false);
@@ -43,7 +45,20 @@ export default function BarbershopSettings() {
     try {
       const res = await api.get('/barbershops/me/profile');
       setShop(res.data);
-      setForm({ name: res.data.name||'', phone: res.data.phone||'', address: res.data.address||'', city: res.data.city||'', description: res.data.description||'', opening_time: res.data.opening_time?.substring(0,5)||'08:00', closing_time: res.data.closing_time?.substring(0,5)||'20:00' });
+      setForm({ 
+        name: res.data.name||'', 
+        phone: res.data.phone||'', 
+        address: res.data.address||'', 
+        city: res.data.city||'', 
+        description: res.data.description||'', 
+        opening_time: res.data.opening_time?.substring(0,5)||'08:00', 
+        closing_time: res.data.closing_time?.substring(0,5)||'20:00',
+        latitude: res.data.latitude || null,
+        longitude: res.data.longitude || null
+      });
+      if (res.data.latitude && res.data.longitude) {
+        setLocation([res.data.latitude, res.data.longitude]);
+      }
     } catch {}
   };
 
@@ -58,7 +73,12 @@ export default function BarbershopSettings() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.put('/barbershops/me/profile', form);
+      const dataToSend = { ...form };
+      if (location) {
+        dataToSend.latitude = location[0];
+        dataToSend.longitude = location[1];
+      }
+      const res = await api.put('/barbershops/me/profile', dataToSend);
       setShop(res.data);
       toast.success('Profile updated!');
     } catch { toast.error('Update failed'); }
@@ -202,6 +222,23 @@ export default function BarbershopSettings() {
                 </div>
                 <button className={styles.saveBtn} type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Profile'}</button>
               </form>
+
+              <div className={styles.mapSection}>
+                <h3><MapPin size={18} /> Shop Location</h3>
+                <p className={styles.hint}>Click on the map to set your barbershop's location. This will help customers find you.</p>
+                <Map
+                  center={location || [14.42, 121.45]}
+                  zoom={13}
+                  onLocationSelect={setLocation}
+                  selectedLocation={location}
+                  height="300px"
+                />
+                {location && (
+                  <div className={styles.locationInfo}>
+                    <small>Selected location: {location[0].toFixed(6)}, {location[1].toFixed(6)}</small>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Payment Methods */}

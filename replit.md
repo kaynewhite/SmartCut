@@ -6,7 +6,7 @@ A full-stack web application for barbershop management and customer booking. Fea
 ## Architecture
 - **Frontend**: React 18 + Vite (port 5000, host 0.0.0.0)
 - **Backend**: Express.js (port 3001, host localhost)
-- **Database**: PostgreSQL (Replit built-in, accessed via `DATABASE_URL`)
+- **Database**: MongoDB (accessed via `MONGODB_URI` or `DATABASE_URL`)
 - **Workflow**: `npm run dev` at root runs both via `concurrently`
 
 ## Project Structure

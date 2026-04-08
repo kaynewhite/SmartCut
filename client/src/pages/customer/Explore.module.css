@@ -51,7 +51,38 @@
   white-space: nowrap;
   transition: opacity 0.2s;
 }
-.searchBtn:hover { opacity: 0.88; }
+.viewToggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.viewBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.viewBtn.active {
+  background: rgba(212,175,55,0.12);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.mapContainer {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
 
 .modeToggle {
   display: flex;

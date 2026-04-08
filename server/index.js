@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,11 @@ app.use('/api/payment-methods', require('./routes/paymentMethods'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
-app.listen(PORT, 'localhost', () => {
-  console.log(`SmartCut API running on port ${PORT}`);
+db.connect().then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`SmartCut API running on port ${PORT}`);
+  });
+}).catch((err) => {
+  console.error('Failed to connect to MongoDB', err);
+  process.exit(1);
 });

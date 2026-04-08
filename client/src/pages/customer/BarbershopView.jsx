@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
+import Map from '../../components/Map';
 import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight } from 'lucide-react';
 import styles from './BarbershopView.module.css';
 
@@ -47,7 +48,7 @@ export default function CustomerBarbershop() {
           {shop.description && <p className={styles.desc}>{shop.description}</p>}
 
           <div className={styles.tabs}>
-            {['services','barbers','reviews'].map(t => (
+            {['services','barbers','reviews','location'].map(t => (
               <button key={t} className={`${styles.tab} ${tab === t ? styles.active : ''}`} onClick={() => setTab(t)}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
@@ -122,6 +123,38 @@ export default function CustomerBarbershop() {
                 </div>
               ))}
               {reviews.length === 0 && <div style={{color:'var(--text-muted)',padding:'20px',textAlign:'center'}}>No reviews yet. Be the first!</div>}
+            </div>
+          )}
+
+          {tab === 'location' && (
+            <div className={styles.locationTab}>
+              {shop.latitude && shop.longitude ? (
+                <Map
+                  center={[shop.latitude, shop.longitude]}
+                  zoom={16}
+                  markers={[{
+                    id: shop.id,
+                    name: shop.name,
+                    address: shop.address,
+                    city: shop.city,
+                    latitude: shop.latitude,
+                    longitude: shop.longitude
+                  }]}
+                  height="400px"
+                  interactive={false}
+                />
+              ) : (
+                <div style={{textAlign:'center',padding:'40px',color:'var(--text-muted)'}}>
+                  <MapPin size={40} />
+                  <p>Location not set by the barbershop yet.</p>
+                </div>
+              )}
+              <div className={styles.locationInfo}>
+                <h3>Location Details</h3>
+                {shop.address && <p><strong>Address:</strong> {shop.address}</p>}
+                {shop.city && <p><strong>City:</strong> {shop.city}</p>}
+                {shop.phone && <p><strong>Phone:</strong> {shop.phone}</p>}
+              </div>
             </div>
           )}
         </div>

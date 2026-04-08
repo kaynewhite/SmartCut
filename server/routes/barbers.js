@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const { collection, toObjectId, formatDocs, formatDoc } = require('../db');
 const { authenticateBarbershop } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
@@ -14,18 +14,37 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 // Get all barbers for barbershop
 router.get('/', authenticateBarbershop, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT bar.*, COALESCE(AVG(r.barber_rating), 0) as avg_rating,
-              ARRAY_AGG(bs.specialty) FILTER (WHERE bs.specialty IS NOT NULL) as specialties
-       FROM barbers bar
-       LEFT JOIN ratings r ON r.barber_id = bar.id
-       LEFT JOIN barber_specialties bs ON bs.barber_id = bar.id
-       WHERE bar.barbershop_id = $1
-       GROUP BY bar.id ORDER BY bar.name`,
-      [req.user.id]
-    );
-    res.json(result.rows);
+    const barbers = await collection('barbers');
+    const pipeline = [
+      { $match: { barbershop_id: toObjectId(req.user.id) } },
+      {
+        $lookup: {
+          from: 'ratings',
+          localField: '_id',
+          foreignField: 'barber_id',
+          as: 'ratings'
+        }
+      },
+      {
+        $lookup: {
+          from: 'barber_specialties',
+          localField: '_id',
+          foreignField: 'barber_id',
+          as: 'specialties'
+        }
+      },
+      {
+        $addFields: {
+          avg_rating: { $ifNull: [{ $avg: '$ratings.barber_rating' }, 0] },
+          specialties: { $setUnion: [[], '$specialties.specialty'] }
+        }
+      },
+      { $sort: { name: 1 } }
+    ];
+    const items = await barbers.aggregate(pipeline).toArray();
+    res.json(formatDocs(items));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -35,18 +54,26 @@ router.post('/', authenticateBarbershop, async (req, res) => {
   const { name, phone, bio, specialties } = req.body;
   if (!name) return res.status(400).json({ message: 'Name required' });
   try {
-    const result = await pool.query(
-      'INSERT INTO barbers (barbershop_id, name, phone, bio) VALUES ($1,$2,$3,$4) RETURNING *',
-      [req.user.id, name, phone || null, bio || null]
-    );
-    const barber = result.rows[0];
+    const barbers = await collection('barbers');
+    const barberSpecialties = await collection('barber_specialties');
+    const barberDoc = {
+      barbershop_id: toObjectId(req.user.id),
+      name,
+      phone: phone || null,
+      bio: bio || null,
+      is_available: true,
+      created_at: new Date()
+    };
+    const result = await barbers.insertOne(barberDoc);
+    const barber = { ...barberDoc, id: result.insertedId.toString() };
     if (specialties && specialties.length > 0) {
-      for (const sp of specialties) {
-        await pool.query('INSERT INTO barber_specialties (barber_id, specialty) VALUES ($1,$2)', [barber.id, sp]);
-      }
+      await barberSpecialties.insertMany(
+        specialties.map((sp) => ({ barber_id: result.insertedId, specialty: sp }))
+      );
     }
     res.status(201).json(barber);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -55,21 +82,32 @@ router.post('/', authenticateBarbershop, async (req, res) => {
 router.put('/:id', authenticateBarbershop, async (req, res) => {
   const { name, phone, bio, is_available, specialties } = req.body;
   try {
-    const own = await pool.query('SELECT id FROM barbers WHERE id=$1 AND barbershop_id=$2', [req.params.id, req.user.id]);
-    if (own.rows.length === 0) return res.status(403).json({ message: 'Forbidden' });
-    const result = await pool.query(
-      `UPDATE barbers SET name=COALESCE($1,name), phone=COALESCE($2,phone), bio=COALESCE($3,bio),
-       is_available=COALESCE($4,is_available) WHERE id=$5 RETURNING *`,
-      [name, phone, bio, is_available, req.params.id]
+    const barbers = await collection('barbers');
+    const barber = await barbers.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
+    if (!barber) return res.status(403).json({ message: 'Forbidden' });
+    const update = {
+      ...(name !== undefined ? { name } : {}),
+      ...(phone !== undefined ? { phone } : {}),
+      ...(bio !== undefined ? { bio } : {}),
+      ...(is_available !== undefined ? { is_available } : {})
+    };
+    const result = await barbers.findOneAndUpdate(
+      { _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) },
+      { $set: update },
+      { returnDocument: 'after' }
     );
     if (specialties) {
-      await pool.query('DELETE FROM barber_specialties WHERE barber_id=$1', [req.params.id]);
-      for (const sp of specialties) {
-        await pool.query('INSERT INTO barber_specialties (barber_id, specialty) VALUES ($1,$2)', [req.params.id, sp]);
+      const barberSpecialties = await collection('barber_specialties');
+      await barberSpecialties.deleteMany({ barber_id: toObjectId(req.params.id) });
+      if (specialties.length > 0) {
+        await barberSpecialties.insertMany(
+          specialties.map((sp) => ({ barber_id: toObjectId(req.params.id), specialty: sp }))
+        );
       }
     }
-    res.json(result.rows[0]);
+    res.json(formatDoc(result.value));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -78,12 +116,14 @@ router.put('/:id', authenticateBarbershop, async (req, res) => {
 router.post('/:id/photo', authenticateBarbershop, upload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   try {
-    const own = await pool.query('SELECT id FROM barbers WHERE id=$1 AND barbershop_id=$2', [req.params.id, req.user.id]);
-    if (own.rows.length === 0) return res.status(403).json({ message: 'Forbidden' });
+    const barbers = await collection('barbers');
+    const barber = await barbers.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
+    if (!barber) return res.status(403).json({ message: 'Forbidden' });
     const url = `/uploads/${req.file.filename}`;
-    await pool.query('UPDATE barbers SET photo_url=$1 WHERE id=$2', [url, req.params.id]);
+    await barbers.updateOne({ _id: toObjectId(req.params.id) }, { $set: { photo_url: url } });
     res.json({ photo_url: url });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -91,11 +131,17 @@ router.post('/:id/photo', authenticateBarbershop, upload.single('photo'), async 
 // Delete barber
 router.delete('/:id', authenticateBarbershop, async (req, res) => {
   try {
-    const own = await pool.query('SELECT id FROM barbers WHERE id=$1 AND barbershop_id=$2', [req.params.id, req.user.id]);
-    if (own.rows.length === 0) return res.status(403).json({ message: 'Forbidden' });
-    await pool.query('DELETE FROM barbers WHERE id=$1', [req.params.id]);
+    const barbers = await collection('barbers');
+    const barber = await barbers.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
+    if (!barber) return res.status(403).json({ message: 'Forbidden' });
+    await barbers.deleteOne({ _id: toObjectId(req.params.id) });
+    const barberSpecialties = await collection('barber_specialties');
+    const barberSchedules = await collection('barber_schedules');
+    await barberSpecialties.deleteMany({ barber_id: toObjectId(req.params.id) });
+    await barberSchedules.deleteMany({ barber_id: toObjectId(req.params.id) });
     res.json({ message: 'Deleted' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -103,9 +149,14 @@ router.delete('/:id', authenticateBarbershop, async (req, res) => {
 // Get barber schedule
 router.get('/:id/schedule', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM barber_schedules WHERE barber_id=$1 ORDER BY day_of_week', [req.params.id]);
-    res.json(result.rows);
+    const schedules = await collection('barber_schedules');
+    const items = await schedules
+      .find({ barber_id: toObjectId(req.params.id) })
+      .sort({ day_of_week: 1 })
+      .toArray();
+    res.json(formatDocs(items));
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -114,15 +165,22 @@ router.get('/:id/schedule', async (req, res) => {
 router.post('/:id/schedule', authenticateBarbershop, async (req, res) => {
   const { schedules } = req.body;
   try {
-    await pool.query('DELETE FROM barber_schedules WHERE barber_id=$1', [req.params.id]);
-    for (const s of schedules) {
-      await pool.query(
-        'INSERT INTO barber_schedules (barber_id, day_of_week, start_time, end_time, is_available) VALUES ($1,$2,$3,$4,$5)',
-        [req.params.id, s.day_of_week, s.start_time, s.end_time, s.is_available !== false]
+    const barberSchedules = await collection('barber_schedules');
+    await barberSchedules.deleteMany({ barber_id: toObjectId(req.params.id) });
+    if (schedules && schedules.length > 0) {
+      await barberSchedules.insertMany(
+        schedules.map((s) => ({
+          barber_id: toObjectId(req.params.id),
+          day_of_week: s.day_of_week,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          is_available: s.is_available !== false
+        }))
       );
     }
     res.json({ message: 'Schedule updated' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });

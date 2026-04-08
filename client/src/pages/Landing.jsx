@@ -45,24 +45,9 @@ export default function Landing() {
               <Scissors size={20} color="#d4af37" />
               <span>SmartCut</span>
             </div>
-            <div className={styles.statsGrid}>
-              <div className={styles.statBox}><div className={styles.statNum}>4.9</div><div className={styles.statLabel}>Avg Rating</div></div>
-              <div className={styles.statBox}><div className={styles.statNum}>500+</div><div className={styles.statLabel}>Barbershops</div></div>
-              <div className={styles.statBox}><div className={styles.statNum}>10k+</div><div className={styles.statLabel}>Customers</div></div>
-              <div className={styles.statBox}><div className={styles.statNum}>98%</div><div className={styles.statLabel}>Satisfaction</div></div>
-            </div>
-            <div className={styles.sampleBooking}>
-              <div className={styles.bookingLabel}>Next Available Slot</div>
-              <div className={styles.bookingTime}>Today, 3:00 PM</div>
-              <div className={styles.barberRow}>
-                <div className={styles.barberAvatar}>JD</div>
-                <div>
-                  <div className={styles.barberName}>Juan Dela Cruz</div>
-                  <div className={styles.barberSpec}>Fade Specialist</div>
-                </div>
-                <div className={styles.stars}>★★★★★</div>
-              </div>
-            </div>
+            <p style={{ textAlign: 'center', color: '#8b92a9', marginTop: 24 }}>
+              Log in to explore available barbershops and book your next appointment
+            </p>
           </div>
         </div>
       </section>
@@ -114,12 +99,9 @@ export default function Landing() {
         <div className={styles.shopVisual}>
           <div className={styles.dashPreview}>
             <div className={styles.dashHeader}>Dashboard Overview</div>
-            <div className={styles.dashStats}>
-              <div className={styles.dashStat}><span>32</span><small>Today's Bookings</small></div>
-              <div className={styles.dashStat}><span>₱12,400</span><small>Revenue Today</small></div>
-              <div className={styles.dashStat}><span>4.8 ★</span><small>Avg Rating</small></div>
-              <div className={styles.dashStat}><span>7</span><small>In Queue</small></div>
-            </div>
+            <p style={{ textAlign: 'center', color: '#8b92a9', padding: 24 }}>
+              Register your barbershop to access real-time analytics, booking management, and queue tracking
+            </p>
           </div>
         </div>
       </section>
