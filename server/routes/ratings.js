@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { authenticateCustomer } = require('../middleware/auth');
+const { authenticateCustomer, authenticateBarber } = require('../middleware/auth');
 
 // CUSTOMER: create rating
 router.post('/', authenticateCustomer, async (req, res) => {
@@ -42,6 +42,25 @@ router.get('/barbershop/:id', async (req, res) => {
       WHERE r.barbershop_id = $1
       ORDER BY r.created_at DESC
     `, [req.params.id]);
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// BARBER: ratings about me
+router.get('/barber/me', authenticateBarber, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.id, r.barber_rating, r.comment, r.created_at,
+        c.name as customer_name, c.avatar_url as customer_avatar,
+        s.name as service_name
+      FROM ratings r
+      LEFT JOIN customers c ON c.id = r.customer_id
+      LEFT JOIN appointments a ON a.id = r.appointment_id
+      LEFT JOIN services s ON s.id = a.service_id
+      WHERE r.barber_id = $1 AND r.barber_rating IS NOT NULL
+      ORDER BY r.created_at DESC
+      LIMIT 100
+    `, [req.user.id]);
     res.json(result.rows);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
