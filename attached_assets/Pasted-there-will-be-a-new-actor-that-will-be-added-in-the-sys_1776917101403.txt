@@ -1,0 +1,16 @@
+there will be a new actor that will be added in the system. the barber. the barber's account will be created by the barbershop owner. the barber will be the one to put their available services and specialies. they can also see the queue of customers and the set of appointments to them. but the payment qr image will only be uploaded by the owner.
+make the map satelite view so users can see the actual streets in topdown view. And also lock the map in Siniloan, Laguna, Philippines only. Make sure that the locations will be setted and saved properly so the users will see it on their map accurately and right away.
+the customers can also see the queue and available times(don't show names of other customers, just the queue, just show occupied on the occupied time)
+the profile page of customer is not working, the reviews page is not working, the appointment should also include time.
+there should be a feedback and recommendation system,
+there should be a feedback and reviews for barbers too
+the explore and search should work to help customers find the right barbershop for them. the specialty shoud use dropdown, collecting the saved specialty of all the barbers in the system(no duplication)
+add a solution for prank bookings like barbers can rate the customers if they didn't go at the time. users can only book one appointment at a time, barbershop owners can ban the customer for Ndays, Nweeks, Nmonths or forever if they have to.
+barbershops should show featured pictures of their services, also the homepage of the customers should show some reccomendations of services from different barbershops, like their top services(the ones that is always picked)
+there should be a calendar view in booking process so customers can see visuals, keep it simple if possible.
+there should be a downpayment feature where customers should pay 25% the price(the barbershop owner will set this, since it's him that will upload the qr code) when booking appointment to avoid cancelation
+there should be a notification or reminder system to remind customers of their appointment.
+there should be a "no show" button on the customer that didn't come, then when the barber didn't click it, the slot will now be available again.
+this should be clear to customers when they are booking an appointment, this should be said to them thile booking.
+in the barbershop login, there should be a button for the barber log in, the created accounts of the barbers will log in there
+when there are available, the landing page should also show top featured services from some barbershops, limit to a fixed number, don't show all featured of all barbershop. just the top N
