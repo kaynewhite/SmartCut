@@ -78,11 +78,14 @@ router.get('/me/profile', authenticateBarbershop, async (req, res) => {
 // AUTH: update profile
 router.put('/me/profile', authenticateBarbershop, async (req, res) => {
   try {
-    const { name, phone, address, city, description, opening_time, closing_time } = req.body;
+    const { name, phone, address, city, description, opening_time, closing_time, latitude, longitude, downpayment_percent } = req.body;
     const result = await pool.query(
-      `UPDATE barbershops SET name=$1, phone=$2, address=$3, city=$4, description=$5, opening_time=$6, closing_time=$7
-       WHERE id=$8 RETURNING *`,
-      [name, phone, address, city, description, opening_time || '08:00', closing_time || '20:00', req.user.id]
+      `UPDATE barbershops SET name=$1, phone=$2, address=$3, city=$4, description=$5, opening_time=$6, closing_time=$7,
+         latitude=$8, longitude=$9, downpayment_percent=$10
+       WHERE id=$11 RETURNING *`,
+      [name, phone, address, city, description, opening_time || '08:00', closing_time || '20:00',
+       latitude ? parseFloat(latitude) : null, longitude ? parseFloat(longitude) : null,
+       downpayment_percent !== undefined ? parseInt(downpayment_percent) : 25, req.user.id]
     );
     const shop = result.rows[0];
     delete shop.password;

@@ -24,8 +24,9 @@ router.put('/me', authenticateCustomer, async (req, res) => {
 
 router.get('/me/loyalty', authenticateCustomer, async (req, res) => {
   try {
+    const cust = await pool.query('SELECT loyalty_points FROM customers WHERE id = $1', [req.user.id]);
     const result = await pool.query('SELECT * FROM loyalty_transactions WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]);
-    res.json(result.rows);
+    res.json({ total_points: cust.rows[0]?.loyalty_points || 0, history: result.rows });
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 

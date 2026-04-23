@@ -2,10 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-// Landing
 import Landing from './pages/Landing';
 
-// Customer pages
 import CustomerLogin from './pages/customer/Login';
 import CustomerRegister from './pages/customer/Register';
 import CustomerDashboard from './pages/customer/Dashboard';
@@ -17,7 +15,6 @@ import CustomerHistory from './pages/customer/History';
 import CustomerProfile from './pages/customer/Profile';
 import CustomerQueue from './pages/customer/QueueView';
 
-// Barbershop pages
 import BarbershopLogin from './pages/barbershop/Login';
 import BarbershopRegister from './pages/barbershop/Register';
 import BarbershopDashboard from './pages/barbershop/Dashboard';
@@ -27,6 +24,9 @@ import BarbershopServices from './pages/barbershop/Services';
 import BarbershopQueue from './pages/barbershop/Queue';
 import BarbershopSettings from './pages/barbershop/Settings';
 import BarbershopReviews from './pages/barbershop/Reviews';
+
+import BarberLogin from './pages/barber/Login';
+import BarberDashboard from './pages/barber/Dashboard';
 
 function ProtectedCustomer({ children }) {
   const { user, loading } = useAuth();
@@ -42,17 +42,23 @@ function ProtectedBarbershop({ children }) {
   return children;
 }
 
+function ProtectedBarber({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#d4af37' }}>Loading...</div>;
+  if (!user || user.type !== 'barber') return <Navigate to="/barber/login" replace />;
+  return children;
+}
+
 function AppRoutes() {
   const { user } = useAuth();
+  const dashFor = (t) => t === 'customer' ? '/customer/dashboard' : t === 'barber' ? '/barber/dashboard' : '/barbershop/dashboard';
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
 
-      {/* Customer Auth */}
-      <Route path="/customer/login" element={user?.type === 'customer' ? <Navigate to="/customer/dashboard" /> : <CustomerLogin />} />
-      <Route path="/customer/register" element={user?.type === 'customer' ? <Navigate to="/customer/dashboard" /> : <CustomerRegister />} />
+      <Route path="/customer/login" element={user ? <Navigate to={dashFor(user.type)} /> : <CustomerLogin />} />
+      <Route path="/customer/register" element={user ? <Navigate to={dashFor(user.type)} /> : <CustomerRegister />} />
 
-      {/* Customer Protected */}
       <Route path="/customer/dashboard" element={<ProtectedCustomer><CustomerDashboard /></ProtectedCustomer>} />
       <Route path="/customer/explore" element={<ProtectedCustomer><CustomerExplore /></ProtectedCustomer>} />
       <Route path="/customer/barbershop/:id" element={<ProtectedCustomer><CustomerBarbershop /></ProtectedCustomer>} />
@@ -62,11 +68,9 @@ function AppRoutes() {
       <Route path="/customer/profile" element={<ProtectedCustomer><CustomerProfile /></ProtectedCustomer>} />
       <Route path="/customer/queue/:shopId" element={<ProtectedCustomer><CustomerQueue /></ProtectedCustomer>} />
 
-      {/* Barbershop Auth */}
-      <Route path="/barbershop/login" element={user?.type === 'barbershop' ? <Navigate to="/barbershop/dashboard" /> : <BarbershopLogin />} />
-      <Route path="/barbershop/register" element={user?.type === 'barbershop' ? <Navigate to="/barbershop/dashboard" /> : <BarbershopRegister />} />
+      <Route path="/barbershop/login" element={user ? <Navigate to={dashFor(user.type)} /> : <BarbershopLogin />} />
+      <Route path="/barbershop/register" element={user ? <Navigate to={dashFor(user.type)} /> : <BarbershopRegister />} />
 
-      {/* Barbershop Protected */}
       <Route path="/barbershop/dashboard" element={<ProtectedBarbershop><BarbershopDashboard /></ProtectedBarbershop>} />
       <Route path="/barbershop/appointments" element={<ProtectedBarbershop><BarbershopAppointments /></ProtectedBarbershop>} />
       <Route path="/barbershop/barbers" element={<ProtectedBarbershop><BarbershopBarbers /></ProtectedBarbershop>} />
@@ -74,6 +78,9 @@ function AppRoutes() {
       <Route path="/barbershop/queue" element={<ProtectedBarbershop><BarbershopQueue /></ProtectedBarbershop>} />
       <Route path="/barbershop/settings" element={<ProtectedBarbershop><BarbershopSettings /></ProtectedBarbershop>} />
       <Route path="/barbershop/reviews" element={<ProtectedBarbershop><BarbershopReviews /></ProtectedBarbershop>} />
+
+      <Route path="/barber/login" element={user ? <Navigate to={dashFor(user.type)} /> : <BarberLogin />} />
+      <Route path="/barber/dashboard" element={<ProtectedBarber><BarberDashboard /></ProtectedBarber>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

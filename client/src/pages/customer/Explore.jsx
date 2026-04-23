@@ -14,7 +14,12 @@ export default function CustomerExplore() {
   const [city, setCity] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [view, setView] = useState('list'); // 'list' or 'map'
+  const [view, setView] = useState('list');
+  const [specialtyOptions, setSpecialtyOptions] = useState([]);
+
+  useEffect(() => {
+    api.get('/barbers/specialties').then(res => setSpecialtyOptions(res.data || [])).catch(() => {});
+  }, []);
 
   const fetchShops = async () => {
     setLoading(true);
@@ -54,7 +59,10 @@ export default function CustomerExplore() {
             </div>
             <div className={styles.searchInput}>
               <Scissors size={16} color="#6b7280" />
-              <input placeholder="Specialty (e.g. fade)" value={specialty} onChange={e => setSpecialty(e.target.value)} />
+              <select value={specialty} onChange={e => setSpecialty(e.target.value)} style={{background:'transparent',border:'none',color:'inherit',outline:'none',width:'100%'}}>
+                <option value="">All Specialties</option>
+                {specialtyOptions.map(s => <option key={s} value={s} style={{background:'#1a2234'}}>{s}</option>)}
+              </select>
             </div>
             <div className={styles.searchInput}>
               <span style={{fontSize:12,color:'#6b7280'}}>₱ Max</span>

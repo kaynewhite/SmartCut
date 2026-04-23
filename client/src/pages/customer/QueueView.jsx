@@ -56,7 +56,7 @@ export default function CustomerQueue() {
                 <div key={i} className={`${styles.queueItem} ${a.status === 'in_progress' ? styles.inProgress : ''}`}>
                   <div className={styles.queueNum}>#{a.queue_number}</div>
                   <div className={styles.queueInfo}>
-                    <div className={styles.queueName}>{a.customer_name}</div>
+                    <div className={styles.queueName}>Customer #{a.queue_number}</div>
                     <div className={styles.queueMeta}>{a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''}</div>
                     <div className={styles.queueTime}><Clock size={12} /> {a.appointment_time?.substring(0,5)}</div>
                   </div>
@@ -77,7 +77,7 @@ export default function CustomerQueue() {
                 <div key={i} className={`${styles.queueItem} ${w.status === 'in_progress' ? styles.inProgress : ''}`}>
                   <div className={styles.queueNum}>#{w.queue_number}</div>
                   <div className={styles.queueInfo}>
-                    <div className={styles.queueName}>{w.customer_name}</div>
+                    <div className={styles.queueName}>Walk-in #{w.queue_number}</div>
                     <div className={styles.queueMeta}>{w.service_name} {w.barber_name ? `· ${w.barber_name}` : ''}</div>
                   </div>
                   <span className={`badge ${w.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>

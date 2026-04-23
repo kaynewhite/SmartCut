@@ -25,7 +25,7 @@ const PM_COLORS = {
 
 export default function BarbershopSettings() {
   const [shop, setShop] = useState(null);
-  const [form, setForm] = useState({ name:'', phone:'', address:'', city:'', description:'', opening_time:'08:00', closing_time:'20:00', latitude: null, longitude: null });
+  const [form, setForm] = useState({ name:'', phone:'', address:'', city:'', description:'', opening_time:'08:00', closing_time:'20:00', latitude: null, longitude: null, downpayment_percent: 25 });
   const [saving, setSaving] = useState(false);
   const [location, setLocation] = useState(null);
 
@@ -54,7 +54,8 @@ export default function BarbershopSettings() {
         opening_time: res.data.opening_time?.substring(0,5)||'08:00', 
         closing_time: res.data.closing_time?.substring(0,5)||'20:00',
         latitude: res.data.latitude || null,
-        longitude: res.data.longitude || null
+        longitude: res.data.longitude || null,
+        downpayment_percent: res.data.downpayment_percent ?? 25
       });
       if (res.data.latitude && res.data.longitude) {
         setLocation([res.data.latitude, res.data.longitude]);
@@ -219,6 +220,11 @@ export default function BarbershopSettings() {
                 <div className={styles.row}>
                   <div className={styles.field}><label>Opening Time</label><input className={styles.input} type="time" value={form.opening_time} onChange={set('opening_time')} /></div>
                   <div className={styles.field}><label>Closing Time</label><input className={styles.input} type="time" value={form.closing_time} onChange={set('closing_time')} /></div>
+                </div>
+                <div className={styles.field}>
+                  <label>Required Downpayment % <span style={{color:'#d4af37',fontWeight:700}}>{form.downpayment_percent}%</span></label>
+                  <input type="range" min="0" max="100" step="5" value={form.downpayment_percent} onChange={e => setForm(p => ({...p, downpayment_percent: parseInt(e.target.value)}))} style={{width:'100%'}} />
+                  <small style={{color:'#8b92a9',fontSize:11}}>Customers will be required to pay this percentage upfront to confirm their booking and prevent prank bookings.</small>
                 </div>
                 <button className={styles.saveBtn} type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Profile'}</button>
               </form>

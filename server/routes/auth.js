@@ -76,13 +76,30 @@ router.post('/barbershop/login', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
+// Barber login (account created by barbershop owner)
+router.post('/barber/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ message: 'Missing fields' });
+  try {
+    const result = await pool.query('SELECT * FROM barbers WHERE email = $1', [email.toLowerCase()]);
+    if (!result.rows.length) return res.status(401).json({ message: 'Invalid credentials' });
+    const barber = result.rows[0];
+    if (!barber.password) return res.status(401).json({ message: 'Account not activated. Contact your barbershop owner.' });
+    const match = await bcrypt.compare(password, barber.password);
+    if (!match) return res.status(401).json({ message: 'Invalid credentials' });
+    const token = sign(barber.id, 'barber', { name: barber.name, barbershop_id: barber.barbershop_id });
+    delete barber.password;
+    res.json({ token, user: { ...barber, type: 'barber' } });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
 // Get current user info
 router.get('/me', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'No token' });
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const table = decoded.type === 'customer' ? 'customers' : 'barbershops';
+    const table = decoded.type === 'customer' ? 'customers' : (decoded.type === 'barber' ? 'barbers' : 'barbershops');
     const result = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [decoded.id]);
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     const user = result.rows[0];

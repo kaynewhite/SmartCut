@@ -2,25 +2,34 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Plus, Edit2, Trash2, Star, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, Star, Upload, Mail, Lock, KeyRound } from 'lucide-react';
 import styles from './Barbers.module.css';
 
-const SPECIALTIES_OPTS = ['Low Fade', 'High Fade', 'Mid Fade', 'Skin Fade', 'Classic Cut', 'Crew Cut', 'Pompadour', 'Undercut', 'Buzz Cut', 'Beard Trim', 'Hot Towel Shave', 'Hair Design'];
+const SPECIALTIES_OPTS = ['Low Fade','High Fade','Mid Fade','Skin Fade','Classic Cut','Crew Cut','Pompadour','Undercut','Buzz Cut','Beard Trim','Hot Towel Shave','Hair Design'];
 
 export default function BarbershopBarbers() {
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({ name: '', phone: '', bio: '', specialties: [], is_available: true });
+  const [form, setForm] = useState({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '' });
+  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const fetchBarbers = () => {
-    api.get('/barbers').then(res => setBarbers(res.data)).catch(() => {}).finally(() => setLoading(false));
+    api.get('/barbers/me').then(res => setBarbers(res.data)).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(() => { fetchBarbers(); }, []);
 
-  const openAdd = () => { setForm({ name: '', phone: '', bio: '', specialties: [], is_available: true }); setModal('add'); };
-  const openEdit = (b) => { setForm({ name: b.name, phone: b.phone || '', bio: b.bio || '', specialties: b.specialties?.filter(Boolean) || [], is_available: b.is_available }); setModal(b.id); };
+  const openAdd = () => {
+    setForm({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '' });
+    setPhotoFile(null);
+    setModal('add');
+  };
+  const openEdit = (b) => {
+    setForm({ name: b.name, phone: b.phone || '', bio: b.bio || '', specialties: b.specialties?.filter(Boolean) || [], is_available: b.is_available, email: b.email || '', password: '' });
+    setPhotoFile(null);
+    setModal(b.id);
+  };
 
   const toggleSpecialty = (sp) => setForm(p => ({ ...p, specialties: p.specialties.includes(sp) ? p.specialties.filter(s => s !== sp) : [...p.specialties, sp] }));
 
@@ -28,16 +37,26 @@ export default function BarbershopBarbers() {
     e.preventDefault();
     setSaving(true);
     try {
+      const fd = new FormData();
+      fd.append('name', form.name);
+      fd.append('phone', form.phone || '');
+      fd.append('bio', form.bio || '');
+      fd.append('specialties', form.specialties.join(','));
+      fd.append('is_available', form.is_available);
+      if (form.email) fd.append('email', form.email);
+      if (form.password) fd.append('password', form.password);
+      if (photoFile) fd.append('photo', photoFile);
+      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
       if (modal === 'add') {
-        await api.post('/barbers', form);
-        toast.success('Barber added!');
+        await api.post('/barbers', fd, config);
+        toast.success('Barber added' + (form.email ? ' with login account' : ''));
       } else {
-        await api.put(`/barbers/${modal}`, form);
+        await api.put(`/barbers/${modal}`, fd, config);
         toast.success('Barber updated!');
       }
       setModal(null);
       fetchBarbers();
-    } catch { toast.error('Failed'); }
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setSaving(false); }
   };
 
@@ -47,17 +66,7 @@ export default function BarbershopBarbers() {
       await api.delete(`/barbers/${id}`);
       toast.success('Barber removed');
       fetchBarbers();
-    } catch { toast.error('Failed'); }
-  };
-
-  const uploadPhoto = async (barberId, file) => {
-    const fd = new FormData();
-    fd.append('photo', file);
-    try {
-      await api.post(`/barbers/${barberId}/photo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('Photo updated!');
-      fetchBarbers();
-    } catch { toast.error('Upload failed'); }
+    } catch { toast.error('Failed (may have appointments)'); }
   };
 
   return (
@@ -75,14 +84,11 @@ export default function BarbershopBarbers() {
               <div key={b.id} className={styles.card}>
                 <div className={styles.photoWrapper}>
                   {b.photo_url ? <img src={b.photo_url} alt={b.name} className={styles.photo} /> : <div className={styles.photoPlaceholder}>{b.name.charAt(0)}</div>}
-                  <label className={styles.photoUpload}>
-                    <Upload size={12} />
-                    <input type="file" accept="image/*" onChange={e => uploadPhoto(b.id, e.target.files[0])} style={{display:'none'}} />
-                  </label>
                 </div>
                 <div className={styles.info}>
                   <div className={styles.name}>{b.name}</div>
                   <div className={styles.rating}><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(b.avg_rating||0).toFixed(1)} · {b.total_cuts} cuts</div>
+                  {b.email && <div style={{fontSize:11,color:'#8b92a9',display:'flex',alignItems:'center',gap:4,marginTop:2}}><Mail size={11}/>{b.email}{b.has_account ? <span style={{color:'#16a34a',marginLeft:4}}>✓ Account</span> : null}</div>}
                   {b.phone && <div className={styles.phone}>{b.phone}</div>}
                   {b.bio && <div className={styles.bio}>{b.bio}</div>}
                   {b.specialties?.filter(Boolean).length > 0 && (
@@ -110,6 +116,11 @@ export default function BarbershopBarbers() {
                 <div className={styles.field}><label>Phone</label><input className={styles.input} value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} placeholder="09XX XXX XXXX" /></div>
                 <div className={styles.field}><label>Bio</label><textarea className={styles.textarea} value={form.bio} onChange={e => setForm(p => ({...p, bio: e.target.value}))} rows={2} /></div>
                 <div className={styles.field}>
+                  <label><Upload size={12} style={{display:'inline',marginRight:4}}/>Photo</label>
+                  <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} className={styles.input} />
+                  {photoFile && <small style={{color:'#8b92a9'}}>{photoFile.name}</small>}
+                </div>
+                <div className={styles.field}>
                   <label>Specialties</label>
                   <div className={styles.specsGrid}>
                     {SPECIALTIES_OPTS.map(sp => (
@@ -117,6 +128,20 @@ export default function BarbershopBarbers() {
                     ))}
                   </div>
                 </div>
+
+                <div style={{padding:'14px',background:'rgba(212,175,55,0.08)',border:'1px dashed rgba(212,175,55,0.4)',borderRadius:6,marginTop:8}}>
+                  <div style={{color:'#d4af37',fontWeight:600,marginBottom:8,fontSize:13}}><KeyRound size={13} style={{display:'inline',marginRight:4}}/>Barber Login Account (optional)</div>
+                  <div style={{fontSize:12,color:'#8b92a9',marginBottom:10}}>Give this barber their own login so they can manage their bio, specialties, and view their appointments.</div>
+                  <div className={styles.field}>
+                    <label><Mail size={11} style={{display:'inline',marginRight:4}}/>Email</label>
+                    <input className={styles.input} type="email" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} placeholder="barber@email.com" />
+                  </div>
+                  <div className={styles.field}>
+                    <label><Lock size={11} style={{display:'inline',marginRight:4}}/>{modal === 'add' ? 'Password (min 6 chars)' : 'New Password (leave blank to keep)'}</label>
+                    <input className={styles.input} type="password" value={form.password} onChange={e => setForm(p => ({...p, password: e.target.value}))} placeholder="••••••" />
+                  </div>
+                </div>
+
                 <div className={styles.field}>
                   <label className={styles.checkRow}>
                     <input type="checkbox" checked={form.is_available} onChange={e => setForm(p => ({...p, is_available: e.target.checked}))} />

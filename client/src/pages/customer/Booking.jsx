@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, Scissors, User, Home, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, Scissors, User, Home, ChevronRight, AlertCircle, Info } from 'lucide-react';
 import styles from './Booking.module.css';
 
 const TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
@@ -155,6 +155,19 @@ export default function CustomerBooking() {
             <textarea className={styles.textarea} placeholder="Any special requests? e.g. 'Low fade, keep sides clean'" value={form.notes} onChange={set('notes')} rows={3} />
           </div>
 
+          {/* Booking Rules */}
+          <div style={{background:'rgba(212,175,55,0.08)',border:'1px solid rgba(212,175,55,0.3)',borderRadius:8,padding:'14px 16px',marginTop:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,color:'#d4af37',fontWeight:600,marginBottom:8,fontSize:14}}>
+              <Info size={16} /> Booking Rules
+            </div>
+            <ul style={{margin:0,paddingLeft:20,fontSize:13,color:'#cbd5e1',lineHeight:1.7}}>
+              <li>You can have only <strong>one active appointment</strong> at a time. Complete or cancel it before booking another.</li>
+              <li>A <strong>{shop?.downpayment_percent ?? 25}% downpayment</strong> is required to confirm your booking and avoid prank bookings.</li>
+              <li>If you fail to show up, your slot is auto-released and you'll receive a no-show mark. Repeated no-shows may lead to a ban.</li>
+              <li>Be courteous to barbers — they will rate you as well.</li>
+            </ul>
+          </div>
+
           {/* Summary */}
           {form.service_id && form.appointment_date && form.appointment_time && (
             <div className={styles.summary}>
@@ -163,7 +176,11 @@ export default function CustomerBooking() {
               <div className={styles.summaryRow}><span>Price</span><strong className={styles.gold}>₱{parseFloat(services.find(s => s.id == form.service_id)?.price || 0).toFixed(0)}</strong></div>
               <div className={styles.summaryRow}><span>Date & Time</span><strong>{form.appointment_date} at {form.appointment_time}</strong></div>
               {form.barber_id && <div className={styles.summaryRow}><span>Barber</span><strong>{barbers.find(b => b.id == form.barber_id)?.name}</strong></div>}
-              <div className={styles.summaryNote}>Payment will be made via QR code at the shop or via submitted proof.</div>
+              <div className={styles.summaryRow} style={{borderTop:'1px dashed #2d3748',paddingTop:8,marginTop:4}}>
+                <span style={{color:'#d4af37'}}><AlertCircle size={13} style={{verticalAlign:'middle',marginRight:4}}/>Required Downpayment ({shop?.downpayment_percent ?? 25}%)</span>
+                <strong className={styles.gold}>₱{(parseFloat(services.find(s => s.id == form.service_id)?.price || 0) * (shop?.downpayment_percent ?? 25) / 100).toFixed(2)}</strong>
+              </div>
+              <div className={styles.summaryNote}>After booking, upload your downpayment proof on the Appointments page using your shop's QR.</div>
             </div>
           )}
 

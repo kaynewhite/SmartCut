@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Scissors, ArrowLeft } from 'lucide-react';
+import { Scissors, ArrowLeft, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import styles from '../AuthForm.module.css';
 
-export default function BarbershopLogin() {
+export default function BarberLogin() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,10 +18,10 @@ export default function BarbershopLogin() {
     setError('');
     setLoading(true);
     try {
-      const res = await api.post('/auth/barbershop/login', form);
+      const res = await api.post('/auth/barber/login', form);
       login(res.data.token, res.data.user);
       toast.success('Welcome back!');
-      navigate('/barbershop/dashboard');
+      navigate('/barber/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
     } finally {
@@ -36,13 +36,13 @@ export default function BarbershopLogin() {
           <ArrowLeft size={14} /> Back to Home
         </button>
         <div className={styles.logo}><Scissors size={22} /> SmartCut</div>
-        <div className={styles.subtitle}>Barbershop Portal</div>
-        <h1 className={styles.title}>Shop Login</h1>
+        <div className={styles.subtitle}><User size={14} style={{display:'inline',marginRight:4}} /> Barber Portal</div>
+        <h1 className={styles.title}>Barber Login</h1>
         <form className={styles.form} onSubmit={handleSubmit}>
           {error && <div className={styles.error}>{error}</div>}
           <div className={styles.field}>
             <label className={styles.label}>Email</label>
-            <input className={styles.input} type="email" placeholder="shop@email.com" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} required />
+            <input className={styles.input} type="email" placeholder="barber@email.com" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} required />
           </div>
           <div className={styles.field}>
             <label className={styles.label}>Password</label>
@@ -50,15 +50,11 @@ export default function BarbershopLogin() {
           </div>
           <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Logging in...' : 'Login'}</button>
         </form>
-        <div className={styles.switchLink}>
-          New barbershop? <Link to="/barbershop/register">Register your shop</Link>
-        </div>
-        <div style={{marginTop:14, padding:'12px', background:'rgba(212,175,55,0.08)', borderRadius:6, textAlign:'center'}}>
-          <div style={{fontSize:13, color:'#8b92a9', marginBottom:8}}>Are you a barber working here?</div>
-          <Link to="/barber/login" style={{color:'#d4af37', fontWeight:600, fontSize:14, textDecoration:'none'}}>→ Barber Login</Link>
+        <div className={styles.switchLink} style={{marginTop:8}}>
+          Account created by your shop owner. Forgot login? Ask your owner to reset it.
         </div>
         <div className={styles.switchLink} style={{marginTop:8}}>
-          Are you a customer? <Link to="/customer/login">Login here</Link>
+          <Link to="/barbershop/login">← Barbershop Owner Login</Link>
         </div>
       </div>
     </div>

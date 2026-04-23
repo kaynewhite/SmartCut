@@ -1,8 +1,14 @@
 import { Link } from 'react-router-dom';
-import { Scissors, Star, Calendar, Users, MapPin, ArrowRight, Shield, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Scissors, Star, Calendar, Users, MapPin, ArrowRight, Shield, Zap, TrendingUp } from 'lucide-react';
+import api from '../utils/api';
 import styles from './Landing.module.css';
 
 export default function Landing() {
+  const [topServices, setTopServices] = useState([]);
+  useEffect(() => {
+    api.get('/appointments/top-services?limit=6').then(r => setTopServices(r.data || [])).catch(() => {});
+  }, []);
   return (
     <div className={styles.page}>
       <nav className={styles.nav}>
@@ -51,6 +57,32 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {topServices.length > 0 && (
+        <section style={{padding:'60px 8%',background:'#0f1422'}}>
+          <div style={{textAlign:'center',marginBottom:36}}>
+            <div className={styles.sectionLabel}><TrendingUp size={14} style={{display:'inline',marginRight:6}}/>Most Booked</div>
+            <h2 className={styles.sectionTitle}>Top Services Right Now</h2>
+            <p style={{color:'#8b92a9',marginTop:8}}>Based on real booking counts across our barbershops</p>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:20}}>
+            {topServices.map(s => (
+              <div key={s.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden'}}>
+                {s.image_url ? <img src={s.image_url} alt={s.name} style={{width:'100%',height:140,objectFit:'cover'}} />
+                  : <div style={{height:140,background:'linear-gradient(135deg,#1a2234,#2d3748)',display:'flex',alignItems:'center',justifyContent:'center'}}><Scissors size={40} color="#d4af37"/></div>}
+                <div style={{padding:16}}>
+                  <div style={{fontWeight:700,color:'#f0f0f0'}}>{s.name}</div>
+                  <div style={{fontSize:12,color:'#8b92a9',marginTop:4}}>{s.barbershop_name} · {s.barbershop_city}</div>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
+                    <span style={{color:'#d4af37',fontWeight:700}}>₱{parseFloat(s.price).toFixed(0)}</span>
+                    <span style={{fontSize:12,color:'#8b92a9'}}>{s.booking_count} bookings</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className={styles.features}>
         <div className={styles.sectionLabel}>Why SmartCut?</div>

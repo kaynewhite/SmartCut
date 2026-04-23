@@ -15,6 +15,7 @@ export default function Layout({ children }) {
   const [unread, setUnread] = useState(0);
 
   const isShop = user?.type === 'barbershop';
+  const isBarber = user?.type === 'barber';
 
   const customerLinks = [
     { to: '/customer/dashboard', icon: <Home size={18} />, label: 'Home' },
@@ -34,7 +35,11 @@ export default function Layout({ children }) {
     { to: '/barbershop/settings', icon: <Settings size={18} />, label: 'Settings' },
   ];
 
-  const links = isShop ? shopLinks : customerLinks;
+  const barberLinks = [
+    { to: '/barber/dashboard', icon: <LayoutDashboard size={18} />, label: 'My Dashboard' },
+  ];
+
+  const links = isShop ? shopLinks : isBarber ? barberLinks : customerLinks;
 
   useEffect(() => {
     fetchNotifications();
@@ -89,7 +94,7 @@ export default function Layout({ children }) {
           <div className={styles.avatar}>{user?.name?.charAt(0)?.toUpperCase()}</div>
           <div>
             <div className={styles.userName}>{user?.name}</div>
-            <div className={styles.userType}>{isShop ? 'Barbershop' : 'Customer'}</div>
+            <div className={styles.userType}>{isShop ? 'Barbershop' : isBarber ? 'Barber' : 'Customer'}</div>
           </div>
         </div>
 
