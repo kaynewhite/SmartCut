@@ -1,7 +1,13 @@
 # SmartCut — Barbershop Operations & Customer Engagement System
 
 ## Overview
-A full-stack web application for barbershop management and customer booking. Features separate portals for barbershop owners and customers, with real-time queue management, appointment booking, QR-code payments, and loyalty rewards.
+A full-stack web application for barbershop management and customer booking. Features separate portals for barbershop owners, barbers, and customers, with real-time queue management, appointment booking, QR-code payments, and per-shop loyalty rewards.
+
+## Recent Changes (Apr 2026)
+- **Per-shop loyalty**: Points are tracked per (customer, barbershop) in `customer_shop_loyalty`. Earned on completed appointments and ratings, redeemed only via the Promos tab on each shop's BarbershopView. Server endpoints: `GET /loyalty-promos/balance/:shopId`, redeem deducts per-shop balance.
+- **Role split**: Barbers (separate `/barber/*` pages) add only the NAMES of services they offer (price NULL). Owner page renamed "Service Pricing" — owner cannot add services, only sets price/duration/category and toggles active. Unpriced services are hidden from public listings until priced.
+- **Map**: Standard OSM tiles, click-only pin selection (no drag) on owner Settings.
+- **DB**: Added `services.created_by_barber_id`, `services.price` nullable, `loyalty_transactions.barbershop_id`.
 
 ## Architecture
 - **Frontend**: React 18 + Vite (port 5000, host 0.0.0.0)

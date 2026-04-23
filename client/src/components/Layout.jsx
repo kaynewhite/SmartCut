@@ -30,7 +30,7 @@ export default function Layout({ children }) {
     { to: '/barbershop/appointments', icon: <Calendar size={18} />, label: 'Appointments' },
     { to: '/barbershop/queue', icon: <Clock size={18} />, label: 'Queue' },
     { to: '/barbershop/barbers', icon: <Users size={18} />, label: 'Barbers' },
-    { to: '/barbershop/services', icon: <Briefcase size={18} />, label: 'Services' },
+    { to: '/barbershop/services', icon: <Briefcase size={18} />, label: 'Service Pricing' },
     { to: '/barbershop/promos', icon: <Gift size={18} />, label: 'Loyalty Promos' },
     { to: '/barbershop/reviews', icon: <MessageSquare size={18} />, label: 'Reviews' },
     { to: '/barbershop/settings', icon: <Settings size={18} />, label: 'Settings' },
@@ -38,8 +38,9 @@ export default function Layout({ children }) {
 
   const barberLinks = [
     { to: '/barber/dashboard', icon: <LayoutDashboard size={18} />, label: 'My Dashboard' },
-    { to: '/barber/dashboard?tab=reviews', icon: <MessageSquare size={18} />, label: 'My Reviews' },
-    { to: '/barber/dashboard?tab=profile', icon: <User size={18} />, label: 'My Profile' },
+    { to: '/barber/services', icon: <Briefcase size={18} />, label: 'Services & Specialties' },
+    { to: '/barber/reviews', icon: <MessageSquare size={18} />, label: 'My Reviews' },
+    { to: '/barber/profile', icon: <User size={18} />, label: 'My Profile' },
   ];
 
   const links = isShop ? shopLinks : isBarber ? barberLinks : customerLinks;

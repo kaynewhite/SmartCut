@@ -79,7 +79,16 @@ router.delete('/me/:id', authenticateBarbershop, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// AUTH (CUSTOMER): redeem a promo
+// AUTH (CUSTOMER): get my points balance at a specific shop
+router.get('/balance/:shopId', authenticateCustomer, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT points FROM customer_shop_loyalty WHERE customer_id = $1 AND barbershop_id = $2',
+      [req.user.id, req.params.shopId]);
+    res.json({ barbershop_id: parseInt(req.params.shopId), points: r.rows[0]?.points || 0 });
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+});
+
+// AUTH (CUSTOMER): redeem a promo (uses points earned at THAT shop only)
 router.post('/:id/redeem', authenticateCustomer, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -87,15 +96,24 @@ router.post('/:id/redeem', authenticateCustomer, async (req, res) => {
     const promoR = await client.query('SELECT * FROM loyalty_promos WHERE id = $1 AND is_active = true', [req.params.id]);
     if (!promoR.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Promo not available' }); }
     const promo = promoR.rows[0];
-    const custR = await client.query('SELECT loyalty_points FROM customers WHERE id = $1 FOR UPDATE', [req.user.id]);
-    if (!custR.rows.length || custR.rows[0].loyalty_points < promo.points_cost) {
+    const balR = await client.query(
+      'SELECT points FROM customer_shop_loyalty WHERE customer_id = $1 AND barbershop_id = $2 FOR UPDATE',
+      [req.user.id, promo.barbershop_id]
+    );
+    const balance = balR.rows[0]?.points || 0;
+    if (balance < promo.points_cost) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: `Not enough points. You need ${promo.points_cost} points.` });
+      return res.status(400).json({ message: `Not enough points at this shop. You have ${balance}, need ${promo.points_cost}.` });
     }
     const code = 'PR' + Math.random().toString(36).slice(2, 8).toUpperCase();
-    await client.query('UPDATE customers SET loyalty_points = loyalty_points - $1 WHERE id = $2', [promo.points_cost, req.user.id]);
-    await client.query(`INSERT INTO loyalty_transactions (customer_id, points, type, description) VALUES ($1,$2,'spent',$3)`,
-      [req.user.id, -promo.points_cost, `Redeemed: ${promo.name}`]);
+    await client.query(
+      `INSERT INTO customer_shop_loyalty (customer_id, barbershop_id, points, updated_at)
+       VALUES ($1,$2,-$3,NOW())
+       ON CONFLICT (customer_id, barbershop_id) DO UPDATE SET points = customer_shop_loyalty.points - $3, updated_at = NOW()`,
+      [req.user.id, promo.barbershop_id, promo.points_cost]
+    );
+    await client.query(`INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,$3,'spent',$4)`,
+      [req.user.id, promo.barbershop_id, -promo.points_cost, `Redeemed: ${promo.name}`]);
     const redR = await client.query(
       `INSERT INTO promo_redemptions (customer_id, promo_id, barbershop_id, points_spent, redemption_code) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [req.user.id, promo.id, promo.barbershop_id, promo.points_cost, code]

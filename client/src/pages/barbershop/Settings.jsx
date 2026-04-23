@@ -253,7 +253,7 @@ export default function BarbershopSettings() {
 
               <div className={styles.mapSection}>
                 <h3><MapPin size={18} /> Shop Location</h3>
-                <p className={styles.hint}>Click anywhere on the map (or drag the pin) to set your barbershop's exact location, then press <b>Save Location</b>. Customers will see this pin on their map.</p>
+                <p className={styles.hint}>Click anywhere on the map to drop your shop's pin, then press <b>Save Location</b>. Customers will see this pin on their map.</p>
                 <Map
                   center={location || SINILOAN_CENTER}
                   zoom={DEFAULT_ZOOM}

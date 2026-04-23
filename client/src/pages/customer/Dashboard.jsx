@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, Star, Search, ArrowRight, Scissors, MapPin, Gift, TrendingUp, Bell } from 'lucide-react';
+import { Calendar, Clock, Star, Search, ArrowRight, Scissors, MapPin, Gift, TrendingUp, Bell, ChevronRight } from 'lucide-react';
 import styles from './Dashboard.module.css';
 
 export default function CustomerDashboard() {
@@ -14,8 +14,6 @@ export default function CustomerDashboard() {
   const [promos, setPromos] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [redeeming, setRedeeming] = useState(null);
-
   const fetchAll = async () => {
     try {
       const [apptRes, topRes, promoRes, remRes] = await Promise.all([
@@ -33,18 +31,6 @@ export default function CustomerDashboard() {
   };
 
   useEffect(() => { fetchAll(); }, []);
-
-  const redeem = async (promo) => {
-    if ((user?.loyalty_points || 0) < promo.points_cost) return toast.error(`You need ${promo.points_cost} points`);
-    if (!confirm(`Redeem "${promo.name}" for ${promo.points_cost} points?`)) return;
-    setRedeeming(promo.id);
-    try {
-      const res = await api.post(`/loyalty-promos/${promo.id}/redeem`);
-      toast.success(`Redeemed! Your code: ${res.data.redemption_code}`);
-      updateUser({ loyalty_points: (user?.loyalty_points || 0) - promo.points_cost });
-    } catch (err) { toast.error(err.response?.data?.message || 'Redemption failed'); }
-    finally { setRedeeming(null); }
-  };
 
   const upcoming = appointments.filter(a => ['pending','confirmed','in_progress'].includes(a.status));
   const statusColors = { pending: 'warning', confirmed: 'success', in_progress: 'info', completed: 'success', cancelled: 'error', no_show: 'error' };
@@ -69,13 +55,6 @@ export default function CustomerDashboard() {
             <div>
               <div className={styles.statNum}>{upcoming.length}</div>
               <div className={styles.statLabel}>Upcoming</div>
-            </div>
-          </div>
-          <div className={styles.statCard}>
-            <Gift size={20} color="#d4af37" />
-            <div>
-              <div className={styles.statNum}>{user?.loyalty_points || 0}</div>
-              <div className={styles.statLabel}>Loyalty Points</div>
             </div>
           </div>
           <div className={styles.statCard}>
@@ -166,31 +145,25 @@ export default function CustomerDashboard() {
         {promos.length > 0 && (
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
-              <h2><Gift size={18} style={{display:'inline',verticalAlign:'-3px',marginRight:6,color:'#d4af37'}}/>Loyalty Rewards</h2>
-              <span style={{fontSize:12,color:'#d4af37'}}>{user?.loyalty_points || 0} pts available</span>
+              <h2><Gift size={18} style={{display:'inline',verticalAlign:'-3px',marginRight:6,color:'#d4af37'}}/>Promos at Local Shops</h2>
+              <span style={{fontSize:12,color:'#8b92a9'}}>Points are earned and redeemed per shop</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:16}}>
-              {promos.map(p => {
-                const canAfford = (user?.loyalty_points || 0) >= p.points_cost;
-                return (
-                  <div key={p.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden'}}>
-                    {p.image_url ? <img src={p.image_url} alt={p.name} style={{width:'100%',height:130,objectFit:'cover'}}/>
-                      : <div style={{height:130,background:'linear-gradient(135deg,#d4af37,#a8841d)',display:'flex',alignItems:'center',justifyContent:'center'}}><Gift size={40} color="#0f1422"/></div>}
-                    <div style={{padding:14}}>
-                      <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
-                      <div style={{fontSize:12,color:'#8b92a9',marginTop:2}}>{p.barbershop_name}</div>
-                      {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
-                        <span style={{color:'#d4af37',fontWeight:700,fontSize:14,display:'inline-flex',alignItems:'center',gap:4}}><Gift size={12}/>{p.points_cost} pts</span>
-                        <button onClick={() => redeem(p)} disabled={!canAfford || redeeming === p.id}
-                          style={{padding:'6px 12px',background:canAfford?'#d4af37':'#374151',color:canAfford?'#0f1422':'#8b92a9',border:'none',borderRadius:4,fontWeight:700,fontSize:12,cursor:canAfford?'pointer':'not-allowed'}}>
-                          {redeeming === p.id ? '...' : canAfford ? 'Redeem' : 'Need more'}
-                        </button>
-                      </div>
+              {promos.map(p => (
+                <Link key={p.id} to={`/customer/barbershop/${p.barbershop_id}`} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden',textDecoration:'none',color:'inherit'}}>
+                  {p.image_url ? <img src={p.image_url} alt={p.name} style={{width:'100%',height:130,objectFit:'cover'}}/>
+                    : <div style={{height:130,background:'linear-gradient(135deg,#d4af37,#a8841d)',display:'flex',alignItems:'center',justifyContent:'center'}}><Gift size={40} color="#0f1422"/></div>}
+                  <div style={{padding:14}}>
+                    <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
+                    <div style={{fontSize:12,color:'#8b92a9',marginTop:2}}>{p.barbershop_name}</div>
+                    {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
+                      <span style={{color:'#d4af37',fontWeight:700,fontSize:14,display:'inline-flex',alignItems:'center',gap:4}}><Gift size={12}/>{p.points_cost} pts</span>
+                      <span style={{color:'#8b92a9',fontSize:12,display:'inline-flex',alignItems:'center',gap:2}}>View shop <ChevronRight size={12}/></span>
                     </div>
                   </div>
-                );
-              })}
+                </Link>
+              ))}
             </div>
           </section>
         )}

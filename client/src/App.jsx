@@ -28,6 +28,9 @@ import BarbershopPromos from './pages/barbershop/Promos';
 
 import BarberLogin from './pages/barber/Login';
 import BarberDashboard from './pages/barber/Dashboard';
+import BarberProfile from './pages/barber/Profile';
+import BarberReviews from './pages/barber/Reviews';
+import BarberServicesPage from './pages/barber/Services';
 
 function ProtectedCustomer({ children }) {
   const { user, loading } = useAuth();
@@ -83,6 +86,9 @@ function AppRoutes() {
 
       <Route path="/barber/login" element={user ? <Navigate to={dashFor(user.type)} /> : <BarberLogin />} />
       <Route path="/barber/dashboard" element={<ProtectedBarber><BarberDashboard /></ProtectedBarber>} />
+      <Route path="/barber/profile" element={<ProtectedBarber><BarberProfile /></ProtectedBarber>} />
+      <Route path="/barber/reviews" element={<ProtectedBarber><BarberReviews /></ProtectedBarber>} />
+      <Route path="/barber/services" element={<ProtectedBarber><BarberServicesPage /></ProtectedBarber>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

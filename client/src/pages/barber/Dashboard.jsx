@@ -3,12 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, User, ToggleLeft, ToggleRight, Star, CheckCircle, UserX, ListChecks, Save, Upload, X, MessageSquare, CalendarDays, Plus, Trash2, Briefcase } from 'lucide-react';
+import { Calendar, Clock, ToggleLeft, ToggleRight, Star, CheckCircle, UserX, X, MessageSquare, CalendarDays } from 'lucide-react';
 
 const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled', no_show:'No Show' };
 const STATUS_COLOR = { pending:'warning', confirmed:'success', in_progress:'info', completed:'success', cancelled:'error', no_show:'error' };
 
-const VALID_TABS = ['today','upcoming','reviews','profile'];
+const VALID_TABS = ['today','upcoming'];
 
 export default function BarberDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,33 +24,16 @@ export default function BarberDashboard() {
     if (t === 'today') setSearchParams({}, { replace: true });
     else setSearchParams({ tab: t }, { replace: true });
   };
-  const [newSvc, setNewSvc] = useState({ name:'', price:'', duration_minutes: 30, description:'' });
-  const [creatingSvc, setCreatingSvc] = useState(false);
+
   const [profile, setProfile] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
-  const [reviews, setReviews] = useState([]);
-  const [services, setServices] = useState([]);
-  const [profileForm, setProfileForm] = useState({ bio: '', phone: '', specialties: [], service_ids: [] });
-  const [specInput, setSpecInput] = useState('');
-  const [photoFile, setPhotoFile] = useState(null);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [rateModal, setRateModal] = useState(null); // appointment object
+  const [reviewCount, setReviewCount] = useState(0);
+  const [rateModal, setRateModal] = useState(null);
   const [rateForm, setRateForm] = useState({ rating: 5, comment: '' });
 
   const fetchProfile = async () => {
-    try {
-      const res = await api.get('/barbers/me/profile');
-      setProfile(res.data);
-      setProfileForm({
-        bio: res.data.bio || '',
-        phone: res.data.phone || '',
-        specialties: res.data.specialties?.filter(Boolean) || [],
-        service_ids: res.data.service_ids?.filter(Boolean) || []
-      });
-      const sRes = await api.get('/services', { params: { barbershop_id: res.data.barbershop_id } });
-      setServices(sRes.data || []);
-    } catch {}
+    try { const res = await api.get('/barbers/me/profile'); setProfile(res.data); } catch {}
   };
 
   const fetchAppointments = async () => {
@@ -66,25 +49,21 @@ export default function BarberDashboard() {
       const res = await api.get('/appointments/shop');
       const today = new Date().toISOString().split('T')[0];
       const future = (res.data || []).filter(a =>
-        a.appointment_date >= today &&
-        ['pending','confirmed'].includes(a.status)
+        a.appointment_date >= today && ['pending','confirmed'].includes(a.status)
       ).sort((a,b) => (a.appointment_date + a.appointment_time).localeCompare(b.appointment_date + b.appointment_time));
       setUpcoming(future);
     } catch {}
   };
 
-  const fetchReviews = async () => {
-    try {
-      const res = await api.get('/ratings/barber/me');
-      setReviews(res.data || []);
-    } catch {}
+  const fetchReviewCount = async () => {
+    try { const res = await api.get('/ratings/barber/me'); setReviewCount((res.data || []).length); } catch {}
   };
 
   useEffect(() => {
     fetchProfile();
     fetchAppointments();
     fetchUpcoming();
-    fetchReviews();
+    fetchReviewCount();
     const interval = setInterval(() => { fetchAppointments(); fetchUpcoming(); }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -126,40 +105,8 @@ export default function BarberDashboard() {
     } catch { toast.error('Failed'); }
   };
 
-  const addSpecialty = () => {
-    const v = specInput.trim();
-    if (!v) return;
-    if (profileForm.specialties.some(s => s.toLowerCase() === v.toLowerCase())) {
-      toast.error('Already added');
-      return;
-    }
-    setProfileForm(p => ({ ...p, specialties: [...p.specialties, v] }));
-    setSpecInput('');
-  };
-  const removeSpec = (sp) => setProfileForm(p => ({ ...p, specialties: p.specialties.filter(s => s !== sp) }));
-  const toggleSvc = (id) => setProfileForm(p => ({ ...p, service_ids: p.service_ids.includes(id) ? p.service_ids.filter(s => s !== id) : [...p.service_ids, id] }));
-
-  const saveProfile = async (e) => {
-    e.preventDefault();
-    setSavingProfile(true);
-    try {
-      const fd = new FormData();
-      fd.append('bio', profileForm.bio);
-      fd.append('phone', profileForm.phone);
-      fd.append('specialties', JSON.stringify(profileForm.specialties));
-      fd.append('service_ids', JSON.stringify(profileForm.service_ids));
-      if (photoFile) fd.append('photo', photoFile);
-      await api.put('/barbers/me/profile', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('Profile updated');
-      setPhotoFile(null);
-      fetchProfile();
-    } catch { toast.error('Update failed'); }
-    finally { setSavingProfile(false); }
-  };
-
   const todayAppts = appointments.filter(a => ['pending','confirmed','in_progress'].includes(a.status));
   const completedToday = appointments.filter(a => a.status === 'completed').length;
-  const avgReview = reviews.length ? (reviews.reduce((s,r) => s + (r.barber_rating || 0), 0) / reviews.length).toFixed(1) : null;
 
   const renderApptCard = (a, showDate = false) => (
     <div key={a.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,padding:16}}>
@@ -213,7 +160,7 @@ export default function BarberDashboard() {
           </div>
           <div style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,padding:16,display:'flex',gap:12,alignItems:'center'}}>
             <MessageSquare size={24} color="#d4af37"/>
-            <div><div style={{fontSize:24,fontWeight:700,color:'#f0f0f0'}}>{reviews.length}</div><div style={{fontSize:12,color:'#8b92a9'}}>Reviews</div></div>
+            <div><div style={{fontSize:24,fontWeight:700,color:'#f0f0f0'}}>{reviewCount}</div><div style={{fontSize:12,color:'#8b92a9'}}>Reviews</div></div>
           </div>
         </div>
 
@@ -221,8 +168,6 @@ export default function BarberDashboard() {
           {[
             { k:'today', label:"Today's Appointments", icon: Calendar },
             { k:'upcoming', label:'Upcoming', icon: CalendarDays },
-            { k:'reviews', label:'My Reviews', icon: MessageSquare },
-            { k:'profile', label:'My Profile', icon: User },
           ].map(({k,label,icon:Icon}) => (
             <button key={k} onClick={() => setTab(k)} style={{padding:'12px 20px',background:'none',border:'none',borderBottom:`2px solid ${tab===k?'#d4af37':'transparent'}`,color:tab===k?'#d4af37':'#8b92a9',cursor:'pointer',fontWeight:600}}>
               <Icon size={14} style={{display:'inline',marginRight:6,verticalAlign:'middle'}}/>{label}
@@ -251,137 +196,6 @@ export default function BarberDashboard() {
             }
           </div>
         )}
-
-        {tab === 'reviews' && (
-          <div>
-            {avgReview && <div style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,padding:16,marginBottom:16,display:'flex',alignItems:'center',gap:12}}>
-              <Star size={28} color="#d4af37"/>
-              <div>
-                <div style={{fontSize:24,fontWeight:700,color:'#f0f0f0'}}>{avgReview} <span style={{fontSize:14,color:'#8b92a9',fontWeight:400}}>/ 5.0</span></div>
-                <div style={{fontSize:12,color:'#8b92a9'}}>Based on {reviews.length} customer review{reviews.length !== 1 ? 's' : ''}</div>
-              </div>
-            </div>}
-            {reviews.length === 0 ? <div style={{textAlign:'center',padding:40,color:'#8b92a9'}}>No reviews yet</div> :
-              <div style={{display:'flex',flexDirection:'column',gap:12}}>
-                {reviews.map(r => (
-                  <div key={r.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,padding:16}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                      <div style={{fontWeight:600,color:'#f0f0f0'}}>{r.customer_name || 'Customer'}</div>
-                      <div style={{color:'#d4af37'}}>{'★'.repeat(r.barber_rating)}{'☆'.repeat(5 - r.barber_rating)}</div>
-                    </div>
-                    {r.service_name && <div style={{fontSize:12,color:'#8b92a9',marginBottom:6}}>{r.service_name}</div>}
-                    {r.comment && <div style={{color:'#cbd5e1',fontSize:14}}>{r.comment}</div>}
-                    <div style={{fontSize:11,color:'#6b7280',marginTop:6}}>{new Date(r.created_at).toLocaleDateString()}</div>
-                  </div>
-                ))}
-              </div>
-            }
-          </div>
-        )}
-
-        {tab === 'profile' && profile && (
-          <form onSubmit={saveProfile} style={{maxWidth:700}}>
-            <div style={{display:'flex',gap:16,alignItems:'center',marginBottom:20}}>
-              <div style={{width:80,height:80,borderRadius:'50%',overflow:'hidden',background:'#2d3748',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32,color:'#d4af37',fontWeight:700}}>
-                {profile.photo_url ? <img src={profile.photo_url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : profile.name?.charAt(0)}
-              </div>
-              <label style={{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontSize:13}}>
-                <Upload size={13}/> {photoFile ? photoFile.name : 'Upload Photo'}
-                <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} style={{display:'none'}}/>
-              </label>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Phone</label>
-              <input value={profileForm.phone} onChange={e => setProfileForm(p => ({...p, phone: e.target.value}))} placeholder="09XX XXX XXXX" style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6}}/>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Bio</label>
-              <textarea value={profileForm.bio} onChange={e => setProfileForm(p => ({...p, bio: e.target.value}))} rows={3} placeholder="Tell customers about yourself" style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6}}/>
-            </div>
-            <div style={{marginBottom:14}}>
-              <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>My Specialties</label>
-              <div style={{display:'flex',gap:8,marginBottom:10}}>
-                <input
-                  value={specInput}
-                  onChange={e => setSpecInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSpecialty(); } }}
-                  placeholder="Type a specialty (e.g. Skin Fade) and press Enter"
-                  style={{flex:1,background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6}}
-                />
-                <button type="button" onClick={addSpecialty} style={{padding:'10px 16px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontWeight:600}}>Add</button>
-              </div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {profileForm.specialties.length === 0 ? <span style={{color:'#6b7280',fontSize:13}}>No specialties yet — add what you're great at.</span> :
-                  profileForm.specialties.map(sp => (
-                    <span key={sp} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 10px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,fontSize:12}}>
-                      {sp}
-                      <X size={12} style={{cursor:'pointer'}} onClick={() => removeSpec(sp)}/>
-                    </span>
-                  ))
-                }
-              </div>
-            </div>
-            <div style={{marginBottom:20}}>
-              <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Services I Offer</label>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
-                {services.length === 0 ? <span style={{color:'#8b92a9',fontSize:13}}>No services yet — add one below.</span> :
-                  services.map(s => (
-                    <button key={s.id} type="button" onClick={() => toggleSvc(s.id)} style={{padding:'8px 12px',border:`1px solid ${profileForm.service_ids.includes(s.id) ? '#d4af37' : '#2d3748'}`,background:profileForm.service_ids.includes(s.id) ? 'rgba(212,175,55,0.15)' : 'transparent',color:profileForm.service_ids.includes(s.id) ? '#d4af37' : '#cbd5e1',borderRadius:6,cursor:'pointer',fontSize:12}}>
-                      {s.name} · ₱{parseFloat(s.price).toFixed(0)}
-                    </button>
-                  ))}
-              </div>
-            </div>
-            <button type="submit" disabled={savingProfile} style={{padding:'12px 24px',background:'#d4af37',color:'#0f1422',border:'none',borderRadius:6,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
-              <Save size={14}/> {savingProfile ? 'Saving...' : 'Save Profile'}
-            </button>
-
-            <div style={{marginTop:32,padding:18,background:'#0f1422',border:'1px solid #2d3748',borderRadius:10}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                <Briefcase size={18} color="#d4af37"/>
-                <h3 style={{margin:0,color:'#f0f0f0',fontSize:16}}>Add a Service You Offer</h3>
-              </div>
-              <p style={{color:'#8b92a9',fontSize:12,margin:'0 0 14px 0'}}>You know what you can do — list a new service for your shop. It will be auto-assigned to you and shown to customers.</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 110px 110px',gap:10,marginBottom:10}}>
-                <div>
-                  <label htmlFor="svc-name" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Name</label>
-                  <input id="svc-name" name="svc_name" value={newSvc.name} onChange={e => setNewSvc(s => ({...s, name: e.target.value}))} placeholder="e.g. Skin Fade" style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
-                </div>
-                <div>
-                  <label htmlFor="svc-price" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Price (₱)</label>
-                  <input id="svc-price" name="svc_price" type="number" min="0" value={newSvc.price} onChange={e => setNewSvc(s => ({...s, price: e.target.value}))} placeholder="150" style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
-                </div>
-                <div>
-                  <label htmlFor="svc-dur" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Min</label>
-                  <input id="svc-dur" name="svc_dur" type="number" min="5" value={newSvc.duration_minutes} onChange={e => setNewSvc(s => ({...s, duration_minutes: parseInt(e.target.value) || 30}))} style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
-                </div>
-              </div>
-              <div style={{marginBottom:10}}>
-                <label htmlFor="svc-desc" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Description (optional)</label>
-                <input id="svc-desc" name="svc_desc" value={newSvc.description} onChange={e => setNewSvc(s => ({...s, description: e.target.value}))} placeholder="What's included" style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
-              </div>
-              <button type="button" disabled={creatingSvc} onClick={async () => {
-                if (!newSvc.name.trim() || !newSvc.price) return toast.error('Name and price required');
-                setCreatingSvc(true);
-                try {
-                  const fd = new FormData();
-                  fd.append('name', newSvc.name);
-                  fd.append('price', newSvc.price);
-                  fd.append('duration_minutes', newSvc.duration_minutes);
-                  if (newSvc.description) fd.append('description', newSvc.description);
-                  const res = await api.post('/services/by-barber', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-                  toast.success('Service added');
-                  setNewSvc({ name:'', price:'', duration_minutes: 30, description:'' });
-                  setProfileForm(p => ({ ...p, service_ids: [...new Set([...p.service_ids, res.data.id])] }));
-                  fetchProfile();
-                } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
-                finally { setCreatingSvc(false); }
-              }} style={{padding:'8px 16px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontWeight:600,display:'inline-flex',alignItems:'center',gap:6,fontSize:13}}>
-                <Plus size={14}/> {creatingSvc ? 'Adding...' : 'Add Service'}
-              </button>
-            </div>
-          </form>
-        )}
       </div>
 
       {rateModal && (
@@ -397,7 +211,7 @@ export default function BarberDashboard() {
                 <Star key={n} size={32} fill={n <= rateForm.rating ? '#d4af37' : 'transparent'} color="#d4af37" style={{cursor:'pointer'}} onClick={() => setRateForm(f => ({...f, rating: n}))}/>
               ))}
             </div>
-            <textarea value={rateForm.comment} onChange={e => setRateForm(f => ({...f, comment: e.target.value}))} rows={3} placeholder="Optional comment (e.g. 'Did not show up', 'Great client')" style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,marginBottom:16}}/>
+            <textarea value={rateForm.comment} onChange={e => setRateForm(f => ({...f, comment: e.target.value}))} rows={3} placeholder="Optional comment" style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,marginBottom:16}}/>
             <button type="submit" style={{width:'100%',padding:12,background:'#d4af37',color:'#0f1422',border:'none',borderRadius:6,fontWeight:700,cursor:'pointer'}}>Submit Rating</button>
           </form>
         </div>

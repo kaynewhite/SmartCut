@@ -258,12 +258,19 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
 
     if (status === 'completed' && result.rows[0].customer_id) {
       const points = 1;
-      await pool.query('UPDATE customers SET loyalty_points = loyalty_points + $1 WHERE id = $2', [points, result.rows[0].customer_id]);
-      await pool.query(`INSERT INTO loyalty_transactions (customer_id, points, type, description) VALUES ($1,$2,'earned',$3)`,
-        [result.rows[0].customer_id, points, `Completed appointment #${req.params.id}`]);
+      const shopId = result.rows[0].barbershop_id;
+      const custId = result.rows[0].customer_id;
       await pool.query(
-        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('customer',$1,'+1 Loyalty Point','You earned 1 loyalty point for completing your appointment. Use points to redeem promos!','loyalty',$2)`,
-        [result.rows[0].customer_id, req.params.id]
+        `INSERT INTO customer_shop_loyalty (customer_id, barbershop_id, points, updated_at)
+         VALUES ($1,$2,$3,NOW())
+         ON CONFLICT (customer_id, barbershop_id) DO UPDATE SET points = customer_shop_loyalty.points + $3, updated_at = NOW()`,
+        [custId, shopId, points]
+      );
+      await pool.query(`INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,$3,'earned',$4)`,
+        [custId, shopId, points, `Completed appointment #${req.params.id}`]);
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('customer',$1,'+1 Loyalty Point','You earned 1 loyalty point at this barbershop. Visit the shop page to redeem promos!','loyalty',$2)`,
+        [custId, req.params.id]
       );
     }
     if (status === 'no_show' && result.rows[0].customer_id) {

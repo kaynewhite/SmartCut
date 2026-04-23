@@ -16,9 +16,14 @@ router.post('/', authenticateCustomer, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [req.user.id, barbershop_id, barber_id || null, appointment_id, barbershop_rating, barber_rating || null, comment || null]
     );
-    // award loyalty
-    await pool.query('UPDATE customers SET loyalty_points = loyalty_points + 10 WHERE id = $1', [req.user.id]);
-    await pool.query(`INSERT INTO loyalty_transactions (customer_id, points, type, description) VALUES ($1,10,'earned','Posted a review')`, [req.user.id]);
+    // award loyalty at THIS shop only
+    await pool.query(
+      `INSERT INTO customer_shop_loyalty (customer_id, barbershop_id, points, updated_at)
+       VALUES ($1,$2,10,NOW())
+       ON CONFLICT (customer_id, barbershop_id) DO UPDATE SET points = customer_shop_loyalty.points + 10, updated_at = NOW()`,
+      [req.user.id, barbershop_id]
+    );
+    await pool.query(`INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,10,'earned','Posted a review')`, [req.user.id, barbershop_id]);
 
     // update barber rating average
     if (barber_id && barber_rating) {

@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   try {
     const { barbershop_id } = req.query;
     if (!barbershop_id) return res.json([]);
-    const result = await pool.query('SELECT * FROM services WHERE barbershop_id = $1 AND is_active = true ORDER BY id', [barbershop_id]);
+    const result = await pool.query('SELECT * FROM services WHERE barbershop_id = $1 AND is_active = true AND price IS NOT NULL ORDER BY id', [barbershop_id]);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
@@ -76,23 +76,29 @@ router.delete('/:id', authenticateBarbershop, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Cannot delete (may have appointments)' }); }
 });
 
-// AUTH (BARBER): create a service for own shop AND auto-assign to self
+// AUTH (BARBER): create a service (offering) for own shop — no price, owner sets it later
 router.post('/by-barber', authenticateBarber, upload.single('image'), async (req, res) => {
   try {
-    const { name, description, price, duration_minutes, category, is_home_service } = req.body;
-    if (!name || !price) return res.status(400).json({ message: 'Name and price required' });
+    const { name, description, category, is_home_service } = req.body;
+    if (!name) return res.status(400).json({ message: 'Service name required' });
     const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [req.user.id]);
     if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
     const shopId = barber.rows[0].barbershop_id;
     const image_url = req.file ? `/uploads/${req.file.filename}` : null;
     const result = await pool.query(
-      `INSERT INTO services (barbershop_id, name, description, price, duration_minutes, category, image_url, is_home_service)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [shopId, name, description || null, parseFloat(price), parseInt(duration_minutes) || 30,
-       category || 'haircut', image_url, is_home_service === 'true' || is_home_service === true]
+      `INSERT INTO services (barbershop_id, name, description, price, category, image_url, is_home_service, created_by_barber_id, is_active)
+       VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,true) RETURNING *`,
+      [shopId, name, description || null, category || 'haircut', image_url,
+       is_home_service === 'true' || is_home_service === true, req.user.id]
     );
     await pool.query('INSERT INTO barber_services (barber_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [req.user.id, result.rows[0].id]);
+    // Notify shop owner so they can set a price
+    await pool.query(
+      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+       VALUES ('barbershop',$1,'New Service Awaiting Price',$2,'service_pending_price',$3)`,
+      [shopId, `Barber added "${name}". Set a price so customers can book it.`, result.rows[0].id]
+    );
     res.status(201).json(result.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });

@@ -58,13 +58,22 @@ CREATE TABLE IF NOT EXISTS services (
   barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
-  price NUMERIC(10,2) NOT NULL,
+  price NUMERIC(10,2),
   duration_minutes INTEGER DEFAULT 30,
   category TEXT,
   image_url TEXT,
   is_active BOOLEAN DEFAULT true,
   is_home_service BOOLEAN DEFAULT false,
+  created_by_barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS customer_shop_loyalty (
+  customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+  barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE CASCADE,
+  points INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (customer_id, barbershop_id)
 );
 
 CREATE TABLE IF NOT EXISTS barber_services (
