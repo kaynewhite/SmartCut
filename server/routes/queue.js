@@ -1,154 +1,64 @@
 const express = require('express');
 const router = express.Router();
-const { collection, toObjectId, formatDocs } = require('../db');
+const pool = require('../db');
 const { authenticateBarbershop } = require('../middleware/auth');
 
-// Get queue for barbershop (public - customers can view)
-router.get('/:shopId', async (req, res) => {
+// PUBLIC: get current queue for a shop
+router.get('/:barbershopId', async (req, res) => {
   try {
-    const walkIns = await collection('walk_ins');
-    const appointments = await collection('appointments');
-
-    const walkInsPipeline = [
-      { $match: { barbershop_id: toObjectId(req.params.shopId), status: { $in: ['waiting', 'in_progress'] } } },
-      {
-        $lookup: {
-          from: 'barbers',
-          localField: 'barber_id',
-          foreignField: '_id',
-          as: 'barber'
-        }
-      },
-      { $unwind: { path: '$barber', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'services',
-          localField: 'service_id',
-          foreignField: '_id',
-          as: 'service'
-        }
-      },
-      { $unwind: { path: '$service', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          barber_name: '$barber.name',
-          service_name: '$service.name',
-          duration_minutes: '$service.duration_minutes',
-          barbershop_id: 1,
-          barber_id: 1,
-          service_id: 1,
-          customer_name: 1,
-          status: 1,
-          queue_number: 1,
-          created_at: 1
-        }
-      },
-      { $sort: { created_at: 1 } }
-    ];
-    const walkInItems = await walkIns.aggregate(walkInsPipeline).toArray();
-
     const today = new Date().toISOString().split('T')[0];
-    const apptPipeline = [
-      {
-        $match: {
-          barbershop_id: toObjectId(req.params.shopId),
-          appointment_date: today,
-          status: { $in: ['confirmed', 'in_progress', 'pending'] }
-        }
-      },
-      {
-        $lookup: {
-          from: 'customers',
-          localField: 'customer_id',
-          foreignField: '_id',
-          as: 'customer'
-        }
-      },
-      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'barbers',
-          localField: 'barber_id',
-          foreignField: '_id',
-          as: 'barber'
-        }
-      },
-      { $unwind: { path: '$barber', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'services',
-          localField: 'service_id',
-          foreignField: '_id',
-          as: 'service'
-        }
-      },
-      { $unwind: { path: '$service', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          queue_number: 1,
-          appointment_time: 1,
-          status: 1,
-          customer_name: '$customer.name',
-          barber_name: '$barber.name',
-          service_name: '$service.name'
-        }
-      },
-      { $sort: { appointment_time: 1 } }
-    ];
-    const apptQueue = await appointments.aggregate(apptPipeline).toArray();
-
-    res.json({ walk_ins: formatDocs(walkInItems), appointments: apptQueue });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    const apptRes = await pool.query(`
+      SELECT a.id, a.queue_number, a.status, a.appointment_time,
+        c.name as customer_name, s.name as service_name, br.name as barber_name
+      FROM appointments a
+      LEFT JOIN customers c ON c.id = a.customer_id
+      LEFT JOIN services s ON s.id = a.service_id
+      LEFT JOIN barbers br ON br.id = a.barber_id
+      WHERE a.barbershop_id = $1 AND a.appointment_date = $2 AND a.status IN ('pending','confirmed','in_progress')
+      ORDER BY a.queue_number
+    `, [req.params.barbershopId, today]);
+    const walkInRes = await pool.query(`
+      SELECT w.*, s.name as service_name, br.name as barber_name
+      FROM walk_ins w
+      LEFT JOIN services s ON s.id = w.service_id
+      LEFT JOIN barbers br ON br.id = w.barber_id
+      WHERE w.barbershop_id = $1 AND w.status IN ('waiting','in_progress') AND DATE(w.created_at) = $2
+      ORDER BY w.queue_number
+    `, [req.params.barbershopId, today]);
+    res.json({ appointments: apptRes.rows, walk_ins: walkInRes.rows });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// Add walk-in (barbershop only)
+// AUTH: add walk-in
 router.post('/', authenticateBarbershop, async (req, res) => {
-  const { barber_id, service_id, customer_name } = req.body;
   try {
-    const walkIns = await collection('walk_ins');
-    const today = new Date();
-    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
-    const lastWalkIn = await walkIns
-      .find({ barbershop_id: toObjectId(req.user.id), created_at: { $gte: start, $lt: end } })
-      .sort({ queue_number: -1 })
-      .limit(1)
-      .toArray();
-    const queue_number = lastWalkIn.length ? lastWalkIn[0].queue_number + 1 : 1;
-    const doc = {
-      barbershop_id: toObjectId(req.user.id),
-      barber_id: barber_id ? toObjectId(barber_id) : null,
-      service_id: service_id ? toObjectId(service_id) : null,
-      customer_name: customer_name || 'Walk-in',
-      queue_number,
-      status: 'waiting',
-      created_at: new Date()
-    };
-    const result = await walkIns.insertOne(doc);
-    res.status(201).json({ ...doc, id: result.insertedId.toString() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    const { customer_name, service_id, barber_id } = req.body;
+    if (!customer_name) return res.status(400).json({ message: 'Customer name required' });
+    const today = new Date().toISOString().split('T')[0];
+    const lastQ = await pool.query(
+      `SELECT COALESCE(MAX(queue_number), 0) + 1 as q FROM walk_ins WHERE barbershop_id = $1 AND DATE(created_at) = $2`,
+      [req.user.id, today]
+    );
+    const result = await pool.query(
+      `INSERT INTO walk_ins (barbershop_id, customer_name, service_id, barber_id, queue_number) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.id, customer_name, service_id || null, barber_id || null, lastQ.rows[0].q]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// Update walk-in status
+// AUTH: update walk-in status
 router.patch('/:id/status', authenticateBarbershop, async (req, res) => {
-  const { status } = req.body;
   try {
-    const walkIns = await collection('walk_ins');
-    await walkIns.updateOne(
-      { _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) },
-      { $set: { status } }
+    const { status } = req.body;
+    if (!['waiting','in_progress','done','cancelled'].includes(status)) return res.status(400).json({ message: 'Invalid' });
+    const result = await pool.query(
+      `UPDATE walk_ins SET status = $1 WHERE id = $2 AND barbershop_id = $3 RETURNING *`,
+      [status, req.params.id, req.user.id]
     );
-    res.json({ message: 'Updated' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
 module.exports = router;

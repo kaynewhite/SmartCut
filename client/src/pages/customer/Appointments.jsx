@@ -3,11 +3,20 @@ import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, Scissors, Upload, Star } from 'lucide-react';
+import { Calendar, Clock, Scissors, Upload, Star, CheckCircle } from 'lucide-react';
 import styles from './Appointments.module.css';
 
 const STATUS_COLOR = { pending:'warning', confirmed:'success', in_progress:'info', completed:'success', cancelled:'error', no_show:'error' };
 const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled', no_show:'No Show' };
+
+const PM_COLORS = {
+  'GCash': '#00a0e9', 'Maya (PayMaya)': '#00c28e', 'ShopeePay': '#ee4d2d', 'GrabPay': '#00b14f',
+  'BDO': '#003f8a', 'BPI': '#bd1723', 'Metrobank': '#1c2b6b', 'UnionBank': '#f05a22',
+  'Landbank': '#006837', 'PNB': '#003087', 'Security Bank': '#a50034',
+  'RCBC': '#d10a10', 'EastWest Bank': '#f7941d', 'Chinabank': '#c8102e',
+  'CIMB Bank': '#E22028', 'GoTyme Bank': '#1db954', 'SeaBank': '#2563eb',
+  'Cash': '#16a34a', 'Other': '#6b7280',
+};
 
 export default function CustomerAppointments() {
   const [appointments, setAppointments] = useState([]);
@@ -15,7 +24,8 @@ export default function CustomerAppointments() {
   const [filter, setFilter] = useState('active');
   const [ratingModal, setRatingModal] = useState(null);
   const [payModal, setPayModal] = useState(null);
-  const [qrCode, setQrCode] = useState(null);
+  const [payMethods, setPayMethods] = useState([]);
+  const [selectedPm, setSelectedPm] = useState(null);
   const [rating, setRating] = useState({ barbershop_rating: 5, barber_rating: 5, comment: '' });
   const [payFile, setPayFile] = useState(null);
 
@@ -47,20 +57,25 @@ export default function CustomerAppointments() {
 
   const showPayModal = async (appt) => {
     setPayModal(appt);
+    setSelectedPm(null);
+    setPayFile(null);
     try {
-      const res = await api.get(`/barbershops/${appt.barbershop_id}`);
-      setQrCode(res.data.shop.qr_code_url);
-    } catch {}
+      const res = await api.get(`/payment-methods/barbershop/${appt.barbershop_id}`);
+      setPayMethods(res.data);
+      if (res.data.length === 1) setSelectedPm(res.data[0]);
+    } catch { setPayMethods([]); }
   };
 
   const submitPayment = async () => {
-    if (!payFile) return toast.error('Please select a payment proof image');
+    if (!selectedPm) return toast.error('Please select a payment method');
+    if (!payFile) return toast.error('Please upload your payment proof');
     const fd = new FormData();
     fd.append('proof', payFile);
+    fd.append('payment_method', selectedPm.type);
     try {
       await api.post(`/appointments/${payModal.id}/payment-proof`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('Payment proof submitted!');
-      setPayModal(null); setPayFile(null);
+      toast.success('Payment proof submitted! Waiting for verification.');
+      setPayModal(null); setPayFile(null); setSelectedPm(null);
       fetchAppointments();
     } catch { toast.error('Upload failed'); }
   };
@@ -127,20 +142,53 @@ export default function CustomerAppointments() {
         {/* Payment Modal */}
         {payModal && (
           <div className={styles.modal}>
-            <div className={styles.modalCard}>
+            <div className={styles.modalCard} style={{maxWidth: 520}}>
               <h3>Pay for Appointment</h3>
-              <p className={styles.modalSub}>Scan the QR code below and upload your proof of payment</p>
-              {qrCode ? <img src={qrCode} alt="QR Code" className={styles.qrImg} /> : <div className={styles.noQr}>QR Code not uploaded by shop yet</div>}
-              <div className={styles.uploadArea}>
-                <label className={styles.uploadLabel}>
-                  <Upload size={16} /> Upload Payment Screenshot
-                  <input type="file" accept="image/*" onChange={e => setPayFile(e.target.files[0])} style={{display:'none'}} />
-                </label>
-                {payFile && <div className={styles.fileName}>{payFile.name}</div>}
-              </div>
+              <p className={styles.modalSub}>Total: <strong style={{color:'#d4af37'}}>₱{parseFloat(payModal.total_amount||0).toFixed(0)}</strong></p>
+
+              {payMethods.length === 0 ? (
+                <div className={styles.noQr}>This shop hasn't set up payment methods yet. Please contact them directly.</div>
+              ) : (
+                <>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:10,color:'var(--text-secondary)'}}>1. Choose payment method</div>
+                  <div className={styles.pmGrid}>
+                    {payMethods.map(pm => (
+                      <button key={pm.id} type="button"
+                        className={`${styles.pmOpt} ${selectedPm?.id === pm.id ? styles.pmOptActive : ''}`}
+                        onClick={() => setSelectedPm(pm)}>
+                        <span className={styles.pmTag} style={{background: PM_COLORS[pm.type] || '#6b7280'}}>{pm.type}</span>
+                        {selectedPm?.id === pm.id && <CheckCircle size={14} color="#16a34a" />}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedPm && (
+                    <div className={styles.pmDetail}>
+                      <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:'var(--text-secondary)'}}>2. Scan or send to</div>
+                      {selectedPm.account_name && <div className={styles.pmDetailRow}><span>Account Name:</span><strong>{selectedPm.account_name}</strong></div>}
+                      {selectedPm.account_number && <div className={styles.pmDetailRow}><span>Account/Mobile:</span><strong>{selectedPm.account_number}</strong></div>}
+                      {selectedPm.qr_code_url ? (
+                        <img src={selectedPm.qr_code_url} alt="QR Code" className={styles.qrImg} />
+                      ) : (
+                        <div className={styles.noQr}>No QR uploaded — please send to the account above</div>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{fontSize:13,fontWeight:600,margin:'14px 0 8px',color:'var(--text-secondary)'}}>3. Upload payment proof</div>
+                  <div className={styles.uploadArea}>
+                    <label className={styles.uploadLabel}>
+                      <Upload size={16} /> {payFile ? 'Change Screenshot' : 'Upload Payment Screenshot'}
+                      <input type="file" accept="image/*" onChange={e => setPayFile(e.target.files[0])} style={{display:'none'}} />
+                    </label>
+                    {payFile && <div className={styles.fileName}>{payFile.name}</div>}
+                  </div>
+                </>
+              )}
+
               <div className={styles.modalActions}>
-                <button className={styles.submitBtn} onClick={submitPayment}>Submit Proof</button>
-                <button className={styles.closeBtn2} onClick={() => { setPayModal(null); setPayFile(null); setQrCode(null); }}>Close</button>
+                {payMethods.length > 0 && <button className={styles.submitBtn} onClick={submitPayment}>Submit Proof</button>}
+                <button className={styles.closeBtn2} onClick={() => { setPayModal(null); setPayFile(null); setSelectedPm(null); setPayMethods([]); }}>Close</button>
               </div>
             </div>
           </div>
@@ -157,7 +205,7 @@ export default function CustomerAppointments() {
                 <div className={styles.starRow}>
                   {[1,2,3,4,5].map(s => (
                     <button key={s} type="button" onClick={() => setRating(r => ({...r, barbershop_rating: s}))}
-                      className={s <= rating.barbershop_rating ? 'star-filled' : 'star-empty'} style={{background:'none',border:'none',fontSize:'24px'}}>★</button>
+                      style={{background:'none',border:'none',fontSize:'24px',color: s <= rating.barbershop_rating ? '#f59e0b' : '#374151',cursor:'pointer'}}>★</button>
                   ))}
                 </div>
               </div>
@@ -167,7 +215,7 @@ export default function CustomerAppointments() {
                   <div className={styles.starRow}>
                     {[1,2,3,4,5].map(s => (
                       <button key={s} type="button" onClick={() => setRating(r => ({...r, barber_rating: s}))}
-                        className={s <= rating.barber_rating ? 'star-filled' : 'star-empty'} style={{background:'none',border:'none',fontSize:'24px'}}>★</button>
+                        style={{background:'none',border:'none',fontSize:'24px',color: s <= rating.barber_rating ? '#f59e0b' : '#374151',cursor:'pointer'}}>★</button>
                     ))}
                   </div>
                 </div>

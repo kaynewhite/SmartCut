@@ -1,127 +1,79 @@
 const express = require('express');
 const router = express.Router();
-const { collection, toObjectId, formatDocs, formatDoc } = require('../db');
-const { authenticateBarbershop } = require('../middleware/auth');
+const pool = require('../db');
 const multer = require('multer');
 const path = require('path');
+const { authenticateBarbershop } = require('../middleware/auth');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s/g, '_'))
+  filename: (req, file, cb) => cb(null, `svc_${Date.now()}${path.extname(file.originalname)}`)
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-// Get services for a barbershop
-router.get('/barbershop/:shopId', async (req, res) => {
+// PUBLIC: list services for a shop
+router.get('/', async (req, res) => {
   try {
-    const services = await collection('services');
-    const items = await services
-      .find({ barbershop_id: toObjectId(req.params.shopId), is_active: true })
-      .sort({ category: 1, name: 1 })
-      .toArray();
-    res.json(formatDocs(items));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    const { barbershop_id } = req.query;
+    if (!barbershop_id) return res.json([]);
+    const result = await pool.query('SELECT * FROM services WHERE barbershop_id = $1 AND is_active = true ORDER BY id', [barbershop_id]);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// Get my services
+// AUTH: list my services (active + inactive)
 router.get('/me', authenticateBarbershop, async (req, res) => {
   try {
-    const services = await collection('services');
-    const items = await services
-      .find({ barbershop_id: toObjectId(req.user.id) })
-      .sort({ category: 1, name: 1 })
-      .toArray();
-    res.json(formatDocs(items));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    const result = await pool.query('SELECT * FROM services WHERE barbershop_id = $1 ORDER BY id', [req.user.id]);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// Add service
-router.post('/', authenticateBarbershop, async (req, res) => {
-  const { name, description, price, duration_minutes, category, is_home_service } = req.body;
-  if (!name || !price) return res.status(400).json({ message: 'Name and price required' });
+// AUTH: create
+router.post('/', authenticateBarbershop, upload.single('image'), async (req, res) => {
   try {
-    const services = await collection('services');
-    const serviceDoc = {
-      barbershop_id: toObjectId(req.user.id),
-      name,
-      description: description || null,
-      price,
-      duration_minutes: duration_minutes || 30,
-      category: category || 'haircut',
-      is_home_service: is_home_service || false,
-      is_active: true,
-      created_at: new Date()
-    };
-    const result = await services.insertOne(serviceDoc);
-    res.status(201).json({ ...serviceDoc, id: result.insertedId.toString() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Upload service image
-router.post('/:id/image', authenticateBarbershop, upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  try {
-    const services = await collection('services');
-    const own = await services.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
-    if (!own) return res.status(403).json({ message: 'Forbidden' });
-    const url = `/uploads/${req.file.filename}`;
-    await services.updateOne({ _id: toObjectId(req.params.id) }, { $set: { image_url: url } });
-    res.json({ image_url: url });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Update service
-router.put('/:id', authenticateBarbershop, async (req, res) => {
-  const { name, description, price, duration_minutes, category, is_active, is_home_service } = req.body;
-  try {
-    const services = await collection('services');
-    const own = await services.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
-    if (!own) return res.status(403).json({ message: 'Forbidden' });
-    const update = {
-      ...(name !== undefined ? { name } : {}),
-      ...(description !== undefined ? { description } : {}),
-      ...(price !== undefined ? { price } : {}),
-      ...(duration_minutes !== undefined ? { duration_minutes } : {}),
-      ...(category !== undefined ? { category } : {}),
-      ...(is_active !== undefined ? { is_active } : {}),
-      ...(is_home_service !== undefined ? { is_home_service } : {})
-    };
-    const result = await services.findOneAndUpdate(
-      { _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) },
-      { $set: update },
-      { returnDocument: 'after' }
+    const { name, description, price, duration_minutes, category, is_home_service } = req.body;
+    if (!name || !price) return res.status(400).json({ message: 'Name and price required' });
+    const image_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const result = await pool.query(
+      `INSERT INTO services (barbershop_id, name, description, price, duration_minutes, category, image_url, is_home_service)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.user.id, name, description || null, parseFloat(price), parseInt(duration_minutes) || 30,
+       category || 'haircut', image_url, is_home_service === 'true' || is_home_service === true]
     );
-    res.json(formatDoc(result.value));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    res.status(201).json(result.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// Delete service
+// AUTH: update
+router.put('/:id', authenticateBarbershop, upload.single('image'), async (req, res) => {
+  try {
+    const { name, description, price, duration_minutes, category, is_active, is_home_service } = req.body;
+    const existing = await pool.query('SELECT * FROM services WHERE id = $1 AND barbershop_id = $2', [req.params.id, req.user.id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
+    const image_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].image_url;
+    const result = await pool.query(
+      `UPDATE services SET name=$1, description=$2, price=$3, duration_minutes=$4, category=$5, image_url=$6, is_active=$7, is_home_service=$8
+       WHERE id=$9 AND barbershop_id=$10 RETURNING *`,
+      [name || existing.rows[0].name, description ?? existing.rows[0].description,
+       price ? parseFloat(price) : existing.rows[0].price,
+       duration_minutes ? parseInt(duration_minutes) : existing.rows[0].duration_minutes,
+       category || existing.rows[0].category, image_url,
+       is_active !== undefined ? (is_active === 'true' || is_active === true) : existing.rows[0].is_active,
+       is_home_service !== undefined ? (is_home_service === 'true' || is_home_service === true) : existing.rows[0].is_home_service,
+       req.params.id, req.user.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// AUTH: delete
 router.delete('/:id', authenticateBarbershop, async (req, res) => {
   try {
-    const services = await collection('services');
-    const own = await services.findOne({ _id: toObjectId(req.params.id), barbershop_id: toObjectId(req.user.id) });
-    if (!own) return res.status(403).json({ message: 'Forbidden' });
-    await services.updateOne({ _id: toObjectId(req.params.id) }, { $set: { is_active: false } });
-    res.json({ message: 'Service deactivated' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+    const result = await pool.query('DELETE FROM services WHERE id = $1 AND barbershop_id = $2 RETURNING id', [req.params.id, req.user.id]);
+    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
+    res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ message: 'Cannot delete (may have appointments)' }); }
 });
 
 module.exports = router;
