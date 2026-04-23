@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "web", "bash"]
 
 [workflows]
 runButton = "Project"
@@ -39,3 +39,6 @@ externalPort = 3002
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
+
+[nix]
+channel = "stable-25_05"
