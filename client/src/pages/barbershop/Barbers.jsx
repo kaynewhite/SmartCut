@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Plus, Edit2, Trash2, Star, Upload, Mail, Lock, KeyRound } from 'lucide-react';
+import { Plus, Edit2, Trash2, Star, Upload, Mail, Lock, KeyRound, X } from 'lucide-react';
 import styles from './Barbers.module.css';
-
-const SPECIALTIES_OPTS = ['Low Fade','High Fade','Mid Fade','Skin Fade','Classic Cut','Crew Cut','Pompadour','Undercut','Buzz Cut','Beard Trim','Hot Towel Shave','Hair Design'];
 
 export default function BarbershopBarbers() {
   const [barbers, setBarbers] = useState([]);
@@ -14,6 +12,7 @@ export default function BarbershopBarbers() {
   const [form, setForm] = useState({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '' });
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [specInput, setSpecInput] = useState('');
 
   const fetchBarbers = () => {
     api.get('/barbers/me').then(res => setBarbers(res.data)).catch(() => {}).finally(() => setLoading(false));
@@ -23,15 +22,24 @@ export default function BarbershopBarbers() {
   const openAdd = () => {
     setForm({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '' });
     setPhotoFile(null);
+    setSpecInput('');
     setModal('add');
   };
   const openEdit = (b) => {
     setForm({ name: b.name, phone: b.phone || '', bio: b.bio || '', specialties: b.specialties?.filter(Boolean) || [], is_available: b.is_available, email: b.email || '', password: '' });
     setPhotoFile(null);
+    setSpecInput('');
     setModal(b.id);
   };
 
-  const toggleSpecialty = (sp) => setForm(p => ({ ...p, specialties: p.specialties.includes(sp) ? p.specialties.filter(s => s !== sp) : [...p.specialties, sp] }));
+  const addSpecialty = () => {
+    const v = specInput.trim();
+    if (!v) return;
+    if (form.specialties.some(s => s.toLowerCase() === v.toLowerCase())) { setSpecInput(''); return; }
+    setForm(p => ({ ...p, specialties: [...p.specialties, v] }));
+    setSpecInput('');
+  };
+  const removeSpecialty = (sp) => setForm(p => ({ ...p, specialties: p.specialties.filter(s => s !== sp) }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -121,12 +129,29 @@ export default function BarbershopBarbers() {
                   {photoFile && <small style={{color:'#8b92a9'}}>{photoFile.name}</small>}
                 </div>
                 <div className={styles.field}>
-                  <label>Specialties</label>
-                  <div className={styles.specsGrid}>
-                    {SPECIALTIES_OPTS.map(sp => (
-                      <button key={sp} type="button" className={`${styles.specBtn} ${form.specialties.includes(sp) ? styles.specActive : ''}`} onClick={() => toggleSpecialty(sp)}>{sp}</button>
-                    ))}
+                  <label>Specialties (type your own and press Enter)</label>
+                  <div style={{display:'flex',gap:6}}>
+                    <input
+                      className={styles.input}
+                      value={specInput}
+                      onChange={e => setSpecInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSpecialty(); } }}
+                      placeholder="e.g. Skin Fade, Korean Two-Block, Beard Sculpting"
+                    />
+                    <button type="button" className={styles.addBtn} onClick={addSpecialty}><Plus size={14}/> Add</button>
                   </div>
+                  {form.specialties.length > 0 && (
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+                      {form.specialties.map(sp => (
+                        <span key={sp} className="badge badge-gold" style={{display:'inline-flex',alignItems:'center',gap:4}}>
+                          {sp}
+                          <button type="button" onClick={() => removeSpecialty(sp)} style={{background:'none',border:'none',color:'inherit',cursor:'pointer',padding:0,display:'inline-flex'}}>
+                            <X size={11}/>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{padding:'14px',background:'rgba(212,175,55,0.08)',border:'1px dashed rgba(212,175,55,0.4)',borderRadius:6,marginTop:8}}>

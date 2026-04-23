@@ -19,8 +19,8 @@ export default function CustomerBarbershop() {
   if (loading) return <Layout><div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Loading...</div></Layout>;
   if (!data) return <Layout><div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Barbershop not found.</div></Layout>;
 
-  const { shop, barbers, services, reviews } = data;
-  const categories = [...new Set(services.map(s => s.category))];
+  const { shop, barbers = [], services = [], reviews = [] } = data;
+  const categories = [...new Set((services || []).map(s => s.category).filter(Boolean))];
 
   return (
     <Layout>

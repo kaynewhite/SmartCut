@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
-import Map from '../../components/Map';
+import Map, { SINILOAN_CENTER, DEFAULT_ZOOM } from '../../components/Map';
 import toast from 'react-hot-toast';
 import { Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight, ChevronDown, MapPin } from 'lucide-react';
 import styles from './Settings.module.css';
@@ -28,6 +28,8 @@ export default function BarbershopSettings() {
   const [form, setForm] = useState({ name:'', phone:'', address:'', city:'', description:'', opening_time:'08:00', closing_time:'20:00', latitude: null, longitude: null, downpayment_percent: 25 });
   const [saving, setSaving] = useState(false);
   const [location, setLocation] = useState(null);
+  const [savedLocation, setSavedLocation] = useState(null);
+  const [savingLoc, setSavingLoc] = useState(false);
 
   const [payMethods, setPayMethods] = useState([]);
   const [addModal, setAddModal] = useState(false);
@@ -58,7 +60,9 @@ export default function BarbershopSettings() {
         downpayment_percent: res.data.downpayment_percent ?? 25
       });
       if (res.data.latitude && res.data.longitude) {
-        setLocation([res.data.latitude, res.data.longitude]);
+        const loc = [parseFloat(res.data.latitude), parseFloat(res.data.longitude)];
+        setLocation(loc);
+        setSavedLocation(loc);
       }
     } catch {}
   };
@@ -81,9 +85,27 @@ export default function BarbershopSettings() {
       }
       const res = await api.put('/barbershops/me/profile', dataToSend);
       setShop(res.data);
+      if (location) setSavedLocation(location);
       toast.success('Profile updated!');
     } catch { toast.error('Update failed'); }
     finally { setSaving(false); }
+  };
+
+  const saveLocationOnly = async () => {
+    if (!location) { toast.error('Click on the map to pick a location first'); return; }
+    setSavingLoc(true);
+    try {
+      const res = await api.put('/barbershops/me/profile', {
+        ...form,
+        latitude: location[0],
+        longitude: location[1],
+      });
+      setShop(res.data);
+      setForm(p => ({ ...p, latitude: location[0], longitude: location[1] }));
+      setSavedLocation(location);
+      toast.success('Location saved! Customers can now see this on the map.');
+    } catch { toast.error('Failed to save location'); }
+    finally { setSavingLoc(false); }
   };
 
   const uploadLogo = async (file) => {
@@ -231,19 +253,34 @@ export default function BarbershopSettings() {
 
               <div className={styles.mapSection}>
                 <h3><MapPin size={18} /> Shop Location</h3>
-                <p className={styles.hint}>Click on the map to set your barbershop's location. This will help customers find you.</p>
+                <p className={styles.hint}>Click anywhere on the map (or drag the pin) to set your barbershop's exact location, then press <b>Save Location</b>. Customers will see this pin on their map.</p>
                 <Map
-                  center={location || [14.42, 121.45]}
-                  zoom={13}
+                  center={location || SINILOAN_CENTER}
+                  zoom={DEFAULT_ZOOM}
                   onLocationSelect={setLocation}
                   selectedLocation={location}
-                  height="300px"
+                  height="320px"
                 />
                 {location && (
                   <div className={styles.locationInfo}>
-                    <small>Selected location: {location[0].toFixed(6)}, {location[1].toFixed(6)}</small>
+                    <small>
+                      Pin: {location[0].toFixed(6)}, {location[1].toFixed(6)}
+                      {savedLocation && location[0] === savedLocation[0] && location[1] === savedLocation[1]
+                        ? <span style={{color:'#16a34a',marginLeft:8}}>✓ Saved</span>
+                        : <span style={{color:'#f59e0b',marginLeft:8}}>● Unsaved changes</span>}
+                    </small>
                   </div>
                 )}
+                <button
+                  type="button"
+                  className={styles.saveBtn}
+                  style={{marginTop:10, background:'#16a34a'}}
+                  onClick={saveLocationOnly}
+                  disabled={savingLoc || !location}
+                >
+                  <MapPin size={14} style={{display:'inline',marginRight:6}}/>
+                  {savingLoc ? 'Saving Location…' : 'Save Location'}
+                </button>
               </div>
             </div>
 

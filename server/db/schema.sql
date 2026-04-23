@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS barbershops (
   closing_time TEXT,
   qr_code_url TEXT,
   logo_url TEXT,
+  cover_url TEXT,
+  latitude NUMERIC(10,7),
+  longitude NUMERIC(10,7),
   downpayment_percent INTEGER DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW()
@@ -40,6 +43,7 @@ CREATE TABLE IF NOT EXISTS barbers (
   photo_url TEXT,
   is_available BOOLEAN DEFAULT true,
   rating NUMERIC(3,2) DEFAULT 5.0,
+  total_cuts INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

@@ -9,12 +9,13 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Siniloan, Laguna, Philippines
-export const SINILOAN_CENTER = [14.4119, 121.4524];
+// LSPU Siniloan campus, Laguna, Philippines
+export const SINILOAN_CENTER = [14.4119, 121.4523];
 export const SINILOAN_BOUNDS = [
   [14.36, 121.40], // Southwest
   [14.46, 121.51]  // Northeast
 ];
+export const DEFAULT_ZOOM = 17;
 
 const LocationMarker = ({ position, setPosition, draggable = false }) => {
   useMapEvents({
@@ -49,7 +50,7 @@ const LocationMarker = ({ position, setPosition, draggable = false }) => {
 
 export default function Map({
   center = SINILOAN_CENTER,
-  zoom = 14,
+  zoom = DEFAULT_ZOOM,
   markers = [],
   onLocationSelect,
   selectedLocation,
@@ -92,24 +93,11 @@ export default function Map({
         maxBounds={SINILOAN_BOUNDS}
         maxBoundsViscosity={1.0}
       >
-        {/* Satellite imagery (Esri) */}
+        {/* Standard street map (OpenStreetMap) */}
         <TileLayer
-          attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png"
           maxZoom={19}
-        />
-        {/* Streets/labels overlay so users can see road & place names */}
-        <TileLayer
-          attribution=''
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-          maxZoom={19}
-          opacity={0.85}
-        />
-        <TileLayer
-          attribution=''
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"
-          maxZoom={19}
-          opacity={0.95}
         />
 
         {markers.filter(m => m.latitude && m.longitude).map((marker, index) => (

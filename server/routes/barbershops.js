@@ -55,12 +55,25 @@ router.get('/:id', async (req, res) => {
 
     const servicesRes = await pool.query('SELECT * FROM services WHERE barbershop_id = $1 AND is_active = true ORDER BY id', [req.params.id]);
     const barbersRes = await pool.query(`
-      SELECT b.*, COALESCE(AVG(r.barber_rating), 0)::numeric(3,2) as avg_rating
+      SELECT b.id, b.barbershop_id, b.name, b.phone, b.photo_url, b.bio, b.is_available, b.rating, b.total_cuts,
+        COALESCE(AVG(r.barber_rating), 0)::numeric(3,2) as avg_rating,
+        ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties
       FROM barbers b LEFT JOIN ratings r ON r.barber_id = b.id
       WHERE b.barbershop_id = $1 GROUP BY b.id ORDER BY b.id
     `, [req.params.id]);
 
-    res.json({ shop, services: servicesRes.rows, barbers: barbersRes.rows });
+    const reviewsRes = await pool.query(`
+      SELECT r.id, r.barbershop_rating, r.barber_rating, r.comment, r.created_at,
+        c.name as customer_name, b.name as barber_name
+      FROM ratings r
+      LEFT JOIN customers c ON c.id = r.customer_id
+      LEFT JOIN barbers b ON b.id = r.barber_id
+      WHERE r.barbershop_id = $1
+      ORDER BY r.created_at DESC
+      LIMIT 100
+    `, [req.params.id]);
+
+    res.json({ shop, services: servicesRes.rows, barbers: barbersRes.rows, reviews: reviewsRes.rows });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
