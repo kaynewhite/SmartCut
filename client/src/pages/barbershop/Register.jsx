@@ -43,32 +43,32 @@ export default function BarbershopRegister() {
         <form className={styles.form} onSubmit={handleSubmit}>
           {error && <div className={styles.error}>{error}</div>}
           <div className={styles.field}>
-            <label className={styles.label}>Barbershop Name</label>
-            <input className={styles.input} type="text" placeholder="Juan's Barber Shop" value={form.name} onChange={set('name')} required />
+            <label className={styles.label} htmlFor="shop-reg-name">Barbershop Name</label>
+            <input id="shop-reg-name" name="name" autoComplete="organization" className={styles.input} type="text" placeholder="Juan's Barber Shop" value={form.name} onChange={set('name')} required />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Email</label>
-            <input className={styles.input} type="email" placeholder="shop@email.com" value={form.email} onChange={set('email')} required />
+            <label className={styles.label} htmlFor="shop-reg-email">Email</label>
+            <input id="shop-reg-email" name="email" autoComplete="email" className={styles.input} type="email" placeholder="shop@email.com" value={form.email} onChange={set('email')} required />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Phone</label>
-            <input className={styles.input} type="tel" placeholder="09XX XXX XXXX" value={form.phone} onChange={set('phone')} />
+            <label className={styles.label} htmlFor="shop-reg-phone">Phone</label>
+            <input id="shop-reg-phone" name="phone" autoComplete="tel" className={styles.input} type="tel" placeholder="09XX XXX XXXX" value={form.phone} onChange={set('phone')} />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>City</label>
-            <input className={styles.input} type="text" placeholder="e.g. Siniloan, Laguna" value={form.city} onChange={set('city')} />
+            <label className={styles.label} htmlFor="shop-reg-city">City</label>
+            <input id="shop-reg-city" name="city" autoComplete="address-level2" className={styles.input} type="text" placeholder="e.g. Siniloan, Laguna" value={form.city} onChange={set('city')} />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Address</label>
-            <input className={styles.input} type="text" placeholder="Street, Barangay" value={form.address} onChange={set('address')} />
+            <label className={styles.label} htmlFor="shop-reg-address">Address</label>
+            <input id="shop-reg-address" name="address" autoComplete="street-address" className={styles.input} type="text" placeholder="Street, Barangay" value={form.address} onChange={set('address')} />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Description (optional)</label>
-            <textarea className={styles.textarea} placeholder="Tell customers about your shop..." value={form.description} onChange={set('description')} rows={3} />
+            <label className={styles.label} htmlFor="shop-reg-desc">Description (optional)</label>
+            <textarea id="shop-reg-desc" name="description" className={styles.textarea} placeholder="Tell customers about your shop..." value={form.description} onChange={set('description')} rows={3} />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Password</label>
-            <input className={styles.input} type="password" placeholder="Min 6 characters" value={form.password} onChange={set('password')} required minLength={6} />
+            <label className={styles.label} htmlFor="shop-reg-password">Password</label>
+            <input id="shop-reg-password" name="password" autoComplete="new-password" className={styles.input} type="password" placeholder="Min 6 characters" value={form.password} onChange={set('password')} required minLength={6} />
           </div>
           <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Registering...' : 'Register Shop'}</button>
         </form>

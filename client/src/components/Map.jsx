@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -9,13 +9,23 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// LSPU Siniloan campus, Laguna, Philippines
-export const SINILOAN_CENTER = [14.4119, 121.4523];
+// Default start location — LSPU Siniloan vicinity, Laguna, Philippines
+export const SINILOAN_CENTER = [14.413480043065805, 121.44852231660464];
 export const SINILOAN_BOUNDS = [
   [14.36, 121.40], // Southwest
   [14.46, 121.51]  // Northeast
 ];
 export const DEFAULT_ZOOM = 17;
+
+const RecenterOnChange = ({ center, zoom }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !center) return;
+    map.setView(center, zoom || map.getZoom(), { animate: true });
+    setTimeout(() => map.invalidateSize(), 100);
+  }, [center?.[0], center?.[1]]);
+  return null;
+};
 
 const LocationMarker = ({ position, setPosition, draggable = false }) => {
   useMapEvents({
@@ -102,6 +112,8 @@ export default function Map({
           url="https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png"
           maxZoom={19}
         />
+
+        <RecenterOnChange center={center} zoom={zoom} />
 
         {markers.filter(m => m.latitude && m.longitude).map((marker, index) => (
           <Marker

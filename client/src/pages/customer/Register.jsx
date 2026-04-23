@@ -41,20 +41,20 @@ export default function CustomerRegister() {
         <form className={styles.form} onSubmit={handleSubmit}>
           {error && <div className={styles.error}>{error}</div>}
           <div className={styles.field}>
-            <label className={styles.label}>Full Name</label>
-            <input className={styles.input} type="text" placeholder="Juan Dela Cruz" value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} required />
+            <label className={styles.label} htmlFor="cust-reg-name">Full Name</label>
+            <input id="cust-reg-name" name="name" autoComplete="name" className={styles.input} type="text" placeholder="Juan Dela Cruz" value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} required />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Email</label>
-            <input className={styles.input} type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} required />
+            <label className={styles.label} htmlFor="cust-reg-email">Email</label>
+            <input id="cust-reg-email" name="email" autoComplete="email" className={styles.input} type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} required />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Phone (optional)</label>
-            <input className={styles.input} type="tel" placeholder="09XX XXX XXXX" value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} />
+            <label className={styles.label} htmlFor="cust-reg-phone">Phone (optional)</label>
+            <input id="cust-reg-phone" name="phone" autoComplete="tel" className={styles.input} type="tel" placeholder="09XX XXX XXXX" value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Password</label>
-            <input className={styles.input} type="password" placeholder="Min 6 characters" value={form.password} onChange={e => setForm(p => ({...p, password: e.target.value}))} required minLength={6} />
+            <label className={styles.label} htmlFor="cust-reg-password">Password</label>
+            <input id="cust-reg-password" name="password" autoComplete="new-password" className={styles.input} type="password" placeholder="Min 6 characters" value={form.password} onChange={e => setForm(p => ({...p, password: e.target.value}))} required minLength={6} />
           </div>
           <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create Account'}</button>
         </form>

@@ -41,12 +41,12 @@ export default function BarberLogin() {
         <form className={styles.form} onSubmit={handleSubmit}>
           {error && <div className={styles.error}>{error}</div>}
           <div className={styles.field}>
-            <label className={styles.label}>Email</label>
-            <input className={styles.input} type="email" placeholder="barber@email.com" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} required />
+            <label className={styles.label} htmlFor="barber-login-email">Email</label>
+            <input id="barber-login-email" name="email" autoComplete="email" className={styles.input} type="email" placeholder="barber@email.com" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} required />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Password</label>
-            <input className={styles.input} type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(p => ({...p, password: e.target.value}))} required />
+            <label className={styles.label} htmlFor="barber-login-password">Password</label>
+            <input id="barber-login-password" name="password" autoComplete="current-password" className={styles.input} type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(p => ({...p, password: e.target.value}))} required />
           </div>
           <button className={styles.btn} type="submit" disabled={loading}>{loading ? 'Logging in...' : 'Login'}</button>
         </form>
