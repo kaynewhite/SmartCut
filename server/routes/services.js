@@ -97,11 +97,22 @@ router.post('/by-barber', authenticateBarber, upload.single('image'), async (req
     const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [req.user.id]);
     if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
     const shopId = barber.rows[0].barbershop_id;
+    // Case-insensitive duplicate check within the same shop
+    const dupe = await pool.query(
+      'SELECT * FROM services WHERE barbershop_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1',
+      [shopId, name.trim()]
+    );
+    if (dupe.rows.length) {
+      const existing = dupe.rows[0];
+      await pool.query('INSERT INTO barber_services (barber_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [req.user.id, existing.id]);
+      return res.status(200).json({ ...existing, _attached: true });
+    }
     const image_url = req.file ? `/uploads/${req.file.filename}` : null;
     const result = await pool.query(
       `INSERT INTO services (barbershop_id, name, description, price, category, image_url, is_home_service, created_by_barber_id, is_active)
        VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,true) RETURNING *`,
-      [shopId, name, description || null, category || 'haircut', image_url,
+      [shopId, name.trim(), description || null, category || 'haircut', image_url,
        is_home_service === 'true' || is_home_service === true, req.user.id]
     );
     await pool.query('INSERT INTO barber_services (barber_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
@@ -110,7 +121,7 @@ router.post('/by-barber', authenticateBarber, upload.single('image'), async (req
     await pool.query(
       `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
        VALUES ('barbershop',$1,'New Service Awaiting Price',$2,'service_pending_price',$3)`,
-      [shopId, `Barber added "${name}". Set a price so customers can book it.`, result.rows[0].id]
+      [shopId, `Barber added "${name.trim()}". Set a price so customers can book it.`, result.rows[0].id]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }

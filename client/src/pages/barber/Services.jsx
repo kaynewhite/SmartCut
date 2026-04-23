@@ -9,7 +9,7 @@ export default function BarberServicesPage() {
   const [allServices, setAllServices] = useState([]);
   const [serviceIds, setServiceIds] = useState([]);
   const [specialties, setSpecialties] = useState([]);
-  const [specInput, setSpecInput] = useState('');
+  const [specSelect, setSpecSelect] = useState('');
   const [newSvc, setNewSvc] = useState({ name: '', description: '' });
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -27,12 +27,19 @@ export default function BarberServicesPage() {
   useEffect(() => { load(); }, []);
 
   const addSpecialty = () => {
-    const v = specInput.trim();
-    if (!v) return;
+    const v = (specSelect || '').trim();
+    if (!v) return toast.error('Pick a service first');
     if (specialties.some(s => s.toLowerCase() === v.toLowerCase())) return toast.error('Already added');
     setSpecialties([...specialties, v]);
-    setSpecInput('');
+    setSpecSelect('');
   };
+
+  const offeredServiceNames = allServices
+    .filter(s => serviceIds.includes(s.id))
+    .map(s => s.name);
+  const availableSpecOptions = offeredServiceNames.filter(
+    n => !specialties.some(s => s.toLowerCase() === n.toLowerCase())
+  );
   const removeSpec = sp => setSpecialties(specialties.filter(s => s !== sp));
   const toggleSvc = id => setServiceIds(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]);
 
@@ -76,21 +83,32 @@ export default function BarberServicesPage() {
         <p style={{ color: '#8b92a9', marginTop: 4, marginBottom: 24 }}>List the services you offer and your specialties. The shop owner sets the prices.</p>
 
         <div style={{ background: '#1a2234', border: '1px solid #2d3748', borderRadius: 10, padding: 18, marginBottom: 18 }}>
-          <h3 style={{ margin: 0, color: '#f0f0f0', fontSize: 16, marginBottom: 10 }}>My Specialties</h3>
+          <h3 style={{ margin: 0, color: '#f0f0f0', fontSize: 16, marginBottom: 4 }}>My Specialties</h3>
+          <p style={{ color: '#8b92a9', fontSize: 12, margin: '0 0 10px 0' }}>Pick from the services you offer below — these are the ones you're especially great at.</p>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <input
-              id="spec-input"
+            <select
+              id="spec-select"
               name="specialty"
-              value={specInput}
-              onChange={e => setSpecInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSpecialty(); } }}
-              placeholder="Type a specialty (e.g. Skin Fade) and press Enter"
+              value={specSelect}
+              onChange={e => setSpecSelect(e.target.value)}
+              disabled={availableSpecOptions.length === 0}
               style={{ flex: 1, background: '#0f1422', border: '1px solid #2d3748', color: '#f0f0f0', padding: 10, borderRadius: 6 }}
-            />
-            <button type="button" onClick={addSpecialty} style={{ padding: '10px 16px', background: 'rgba(212,175,55,0.15)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            >
+              <option value="">
+                {offeredServiceNames.length === 0
+                  ? '— Mark services you offer below first —'
+                  : availableSpecOptions.length === 0
+                    ? '— All offered services already added —'
+                    : 'Choose a service to feature as a specialty'}
+              </option>
+              {availableSpecOptions.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <button type="button" onClick={addSpecialty} disabled={!specSelect} style={{ padding: '10px 16px', background: specSelect ? 'rgba(212,175,55,0.15)' : '#1a2234', color: specSelect ? '#d4af37' : '#6b7280', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, cursor: specSelect ? 'pointer' : 'not-allowed', fontWeight: 600 }}>Add</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {specialties.length === 0 ? <span style={{ color: '#6b7280', fontSize: 13 }}>No specialties yet — add what you're great at.</span> :
+            {specialties.length === 0 ? <span style={{ color: '#6b7280', fontSize: 13 }}>No specialties yet — pick what you're great at.</span> :
               specialties.map(sp => (
                 <span key={sp} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(212,175,55,0.15)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, fontSize: 12 }}>
                   {sp}
