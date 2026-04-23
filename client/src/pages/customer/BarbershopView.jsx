@@ -116,22 +116,38 @@ export default function CustomerBarbershop() {
 
           {tab === 'barbers' && (
             <div className={styles.barberGrid}>
-              {barbers.map(b => (
-                <div key={b.id} className={styles.barberCard}>
-                  <div className={styles.barberPhoto}>
-                    {b.photo_url ? <img src={b.photo_url} alt={b.name} /> : b.name.charAt(0)}
-                  </div>
-                  <div className={styles.barberName}>{b.name}</div>
-                  <div className={styles.barberRating}><Star size={12} fill="#f59e0b" color="#f59e0b" /> {parseFloat(b.avg_rating).toFixed(1)}</div>
-                  {b.specialties?.filter(Boolean).length > 0 && (
-                    <div className={styles.specialties}>
-                      {b.specialties.filter(Boolean).map((sp, i) => <span key={i} className="badge badge-gold">{sp}</span>)}
+              {barbers.map(b => {
+                const specs = (b.specialties || []).filter(Boolean);
+                const svcIds = (b.service_ids || []).filter(Boolean);
+                const svcNames = services.filter(s => svcIds.includes(s.id)).map(s => s.name);
+                return (
+                  <div key={b.id} className={styles.barberCard}>
+                    <div className={styles.barberPhoto}>
+                      {b.photo_url ? <img src={b.photo_url} alt={b.name} /> : b.name.charAt(0)}
                     </div>
-                  )}
-                  {b.bio && <div className={styles.bio}>{b.bio}</div>}
-                  <span className={`badge ${b.is_available ? 'badge-success' : 'badge-error'}`}>{b.is_available ? 'Available' : 'Busy'}</span>
-                </div>
-              ))}
+                    <div className={styles.barberName}>{b.name}</div>
+                    <div className={styles.barberRating}><Star size={12} fill="#f59e0b" color="#f59e0b" /> {parseFloat(b.avg_rating).toFixed(1)}</div>
+                    <div style={{marginTop:8,width:'100%'}}>
+                      <div style={{fontSize:11,color:'#8b92a9',textTransform:'uppercase',letterSpacing:0.5,marginBottom:4,textAlign:'left'}}>Specialties</div>
+                      {specs.length > 0 ? (
+                        <div className={styles.specialties}>
+                          {specs.map((sp, i) => <span key={i} className="badge badge-gold">{sp}</span>)}
+                        </div>
+                      ) : (
+                        <div style={{fontSize:12,color:'#6b7280',fontStyle:'italic'}}>No specialties listed</div>
+                      )}
+                    </div>
+                    {svcNames.length > 0 && (
+                      <div style={{marginTop:10,width:'100%'}}>
+                        <div style={{fontSize:11,color:'#8b92a9',textTransform:'uppercase',letterSpacing:0.5,marginBottom:4,textAlign:'left'}}>Services</div>
+                        <div style={{fontSize:12,color:'#cbd5e1',textAlign:'left'}}>{svcNames.join(' • ')}</div>
+                      </div>
+                    )}
+                    {b.bio && <div className={styles.bio} style={{marginTop:8}}>{b.bio}</div>}
+                    <span className={`badge ${b.is_available ? 'badge-success' : 'badge-error'}`} style={{marginTop:8}}>{b.is_available ? 'Available' : 'Busy'}</span>
+                  </div>
+                );
+              })}
               {barbers.length === 0 && <div style={{color:'var(--text-muted)',padding:'20px'}}>No barbers listed yet.</div>}
             </div>
           )}

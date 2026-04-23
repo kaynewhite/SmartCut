@@ -21,6 +21,19 @@ router.get('/', async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH (BARBER): list ALL services in my shop (incl. unpriced)
+router.get('/shop-all', authenticateBarber, async (req, res) => {
+  try {
+    const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [req.user.id]);
+    if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
+    const result = await pool.query(
+      'SELECT * FROM services WHERE barbershop_id = $1 ORDER BY id',
+      [barber.rows[0].barbershop_id]
+    );
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
 // AUTH: list my services (active + inactive)
 router.get('/me', authenticateBarbershop, async (req, res) => {
   try {

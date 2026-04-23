@@ -20,8 +20,7 @@ export default function BarberServicesPage() {
       setProfile(res.data);
       setSpecialties(res.data.specialties?.filter(Boolean) || []);
       setServiceIds(res.data.service_ids?.filter(Boolean) || []);
-      // Owner-side endpoint /services/me returns all (priced + unpriced); use shop-listing for barbers
-      const sRes = await api.get('/services', { params: { barbershop_id: res.data.barbershop_id } });
+      const sRes = await api.get('/services/shop-all');
       setAllServices(sRes.data || []);
     } catch {}
   };

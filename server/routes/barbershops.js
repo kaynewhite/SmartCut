@@ -57,7 +57,8 @@ router.get('/:id', async (req, res) => {
     const barbersRes = await pool.query(`
       SELECT b.id, b.barbershop_id, b.name, b.phone, b.photo_url, b.bio, b.is_available, b.rating, b.total_cuts,
         COALESCE(AVG(r.barber_rating), 0)::numeric(3,2) as avg_rating,
-        ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties
+        ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties,
+        ARRAY(SELECT service_id FROM barber_services WHERE barber_id = b.id) as service_ids
       FROM barbers b LEFT JOIN ratings r ON r.barber_id = b.id
       WHERE b.barbershop_id = $1 GROUP BY b.id ORDER BY b.id
     `, [req.params.id]);
