@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { Scissors, Bell, LogOut, Menu, X, Home, Calendar, Clock, Star, User, Settings, Users, Briefcase, LayoutDashboard, MessageSquare, ChevronRight } from 'lucide-react';
+import { Scissors, Bell, LogOut, Menu, X, Home, Calendar, Clock, Star, User, Settings, Users, Briefcase, LayoutDashboard, MessageSquare, ChevronRight, Gift } from 'lucide-react';
 import styles from './Layout.module.css';
 
 export default function Layout({ children }) {
@@ -31,12 +31,15 @@ export default function Layout({ children }) {
     { to: '/barbershop/queue', icon: <Clock size={18} />, label: 'Queue' },
     { to: '/barbershop/barbers', icon: <Users size={18} />, label: 'Barbers' },
     { to: '/barbershop/services', icon: <Briefcase size={18} />, label: 'Services' },
+    { to: '/barbershop/promos', icon: <Gift size={18} />, label: 'Loyalty Promos' },
     { to: '/barbershop/reviews', icon: <MessageSquare size={18} />, label: 'Reviews' },
     { to: '/barbershop/settings', icon: <Settings size={18} />, label: 'Settings' },
   ];
 
   const barberLinks = [
     { to: '/barber/dashboard', icon: <LayoutDashboard size={18} />, label: 'My Dashboard' },
+    { to: '/barber/dashboard?tab=reviews', icon: <MessageSquare size={18} />, label: 'My Reviews' },
+    { to: '/barber/dashboard?tab=profile', icon: <User size={18} />, label: 'My Profile' },
   ];
 
   const links = isShop ? shopLinks : isBarber ? barberLinks : customerLinks;
@@ -99,18 +102,25 @@ export default function Layout({ children }) {
         </div>
 
         <nav className={styles.nav}>
-          {links.map(link => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`${styles.navLink} ${location.pathname === link.to ? styles.active : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              {link.icon}
-              <span>{link.label}</span>
-              {location.pathname === link.to && <ChevronRight size={14} className={styles.activeArrow} />}
-            </Link>
-          ))}
+          {links.map(link => {
+            const [linkPath, linkQuery] = link.to.split('?');
+            const currentFull = location.pathname + location.search;
+            const isActive = linkQuery
+              ? currentFull === link.to
+              : (location.pathname === linkPath && !location.search);
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`${styles.navLink} ${isActive ? styles.active : ''}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                {link.icon}
+                <span>{link.label}</span>
+                {isActive && <ChevronRight size={14} className={styles.activeArrow} />}
+              </Link>
+            );
+          })}
         </nav>
 
         <button className={styles.logoutBtn} onClick={handleLogout}>

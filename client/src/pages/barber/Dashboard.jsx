@@ -1,14 +1,31 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, User, ToggleLeft, ToggleRight, Star, CheckCircle, UserX, ListChecks, Save, Upload, X, MessageSquare, CalendarDays } from 'lucide-react';
+import { Calendar, Clock, User, ToggleLeft, ToggleRight, Star, CheckCircle, UserX, ListChecks, Save, Upload, X, MessageSquare, CalendarDays, Plus, Trash2, Briefcase } from 'lucide-react';
 
 const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled', no_show:'No Show' };
 const STATUS_COLOR = { pending:'warning', confirmed:'success', in_progress:'info', completed:'success', cancelled:'error', no_show:'error' };
 
+const VALID_TABS = ['today','upcoming','reviews','profile'];
+
 export default function BarberDashboard() {
-  const [tab, setTab] = useState('today');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab');
+  const [tab, setTabState] = useState(VALID_TABS.includes(urlTab) ? urlTab : 'today');
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (VALID_TABS.includes(t)) setTabState(t);
+    else if (!t) setTabState('today');
+  }, [searchParams]);
+  const setTab = (t) => {
+    setTabState(t);
+    if (t === 'today') setSearchParams({}, { replace: true });
+    else setSearchParams({ tab: t }, { replace: true });
+  };
+  const [newSvc, setNewSvc] = useState({ name:'', price:'', duration_minutes: 30, description:'' });
+  const [creatingSvc, setCreatingSvc] = useState(false);
   const [profile, setProfile] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [upcoming, setUpcoming] = useState([]);
@@ -306,8 +323,8 @@ export default function BarberDashboard() {
             </div>
             <div style={{marginBottom:20}}>
               <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Services I Offer</label>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {services.length === 0 ? <span style={{color:'#8b92a9',fontSize:13}}>No services in this shop yet</span> :
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+                {services.length === 0 ? <span style={{color:'#8b92a9',fontSize:13}}>No services yet — add one below.</span> :
                   services.map(s => (
                     <button key={s.id} type="button" onClick={() => toggleSvc(s.id)} style={{padding:'8px 12px',border:`1px solid ${profileForm.service_ids.includes(s.id) ? '#d4af37' : '#2d3748'}`,background:profileForm.service_ids.includes(s.id) ? 'rgba(212,175,55,0.15)' : 'transparent',color:profileForm.service_ids.includes(s.id) ? '#d4af37' : '#cbd5e1',borderRadius:6,cursor:'pointer',fontSize:12}}>
                       {s.name} · ₱{parseFloat(s.price).toFixed(0)}
@@ -318,6 +335,51 @@ export default function BarberDashboard() {
             <button type="submit" disabled={savingProfile} style={{padding:'12px 24px',background:'#d4af37',color:'#0f1422',border:'none',borderRadius:6,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
               <Save size={14}/> {savingProfile ? 'Saving...' : 'Save Profile'}
             </button>
+
+            <div style={{marginTop:32,padding:18,background:'#0f1422',border:'1px solid #2d3748',borderRadius:10}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                <Briefcase size={18} color="#d4af37"/>
+                <h3 style={{margin:0,color:'#f0f0f0',fontSize:16}}>Add a Service You Offer</h3>
+              </div>
+              <p style={{color:'#8b92a9',fontSize:12,margin:'0 0 14px 0'}}>You know what you can do — list a new service for your shop. It will be auto-assigned to you and shown to customers.</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 110px 110px',gap:10,marginBottom:10}}>
+                <div>
+                  <label htmlFor="svc-name" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Name</label>
+                  <input id="svc-name" name="svc_name" value={newSvc.name} onChange={e => setNewSvc(s => ({...s, name: e.target.value}))} placeholder="e.g. Skin Fade" style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
+                </div>
+                <div>
+                  <label htmlFor="svc-price" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Price (₱)</label>
+                  <input id="svc-price" name="svc_price" type="number" min="0" value={newSvc.price} onChange={e => setNewSvc(s => ({...s, price: e.target.value}))} placeholder="150" style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
+                </div>
+                <div>
+                  <label htmlFor="svc-dur" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Min</label>
+                  <input id="svc-dur" name="svc_dur" type="number" min="5" value={newSvc.duration_minutes} onChange={e => setNewSvc(s => ({...s, duration_minutes: parseInt(e.target.value) || 30}))} style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
+                </div>
+              </div>
+              <div style={{marginBottom:10}}>
+                <label htmlFor="svc-desc" style={{color:'#8b92a9',fontSize:12,display:'block',marginBottom:4}}>Description (optional)</label>
+                <input id="svc-desc" name="svc_desc" value={newSvc.description} onChange={e => setNewSvc(s => ({...s, description: e.target.value}))} placeholder="What's included" style={{width:'100%',background:'#1a2234',border:'1px solid #2d3748',color:'#f0f0f0',padding:8,borderRadius:6,fontSize:13}}/>
+              </div>
+              <button type="button" disabled={creatingSvc} onClick={async () => {
+                if (!newSvc.name.trim() || !newSvc.price) return toast.error('Name and price required');
+                setCreatingSvc(true);
+                try {
+                  const fd = new FormData();
+                  fd.append('name', newSvc.name);
+                  fd.append('price', newSvc.price);
+                  fd.append('duration_minutes', newSvc.duration_minutes);
+                  if (newSvc.description) fd.append('description', newSvc.description);
+                  const res = await api.post('/services/by-barber', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                  toast.success('Service added');
+                  setNewSvc({ name:'', price:'', duration_minutes: 30, description:'' });
+                  setProfileForm(p => ({ ...p, service_ids: [...new Set([...p.service_ids, res.data.id])] }));
+                  fetchProfile();
+                } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+                finally { setCreatingSvc(false); }
+              }} style={{padding:'8px 16px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontWeight:600,display:'inline-flex',alignItems:'center',gap:6,fontSize:13}}>
+                <Plus size={14}/> {creatingSvc ? 'Adding...' : 'Add Service'}
+              </button>
+            </div>
           </form>
         )}
       </div>

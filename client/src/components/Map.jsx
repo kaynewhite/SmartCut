@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, LayersControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -61,12 +61,15 @@ export default function Map({
   const mapRef = useRef();
 
   useEffect(() => {
-    if (mapRef.current) {
-      const map = mapRef.current;
-      map.setMaxBounds(SINILOAN_BOUNDS);
-      map.setMinZoom(13);
-      map.setMaxZoom(19);
-    }
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    map.setMaxBounds(SINILOAN_BOUNDS);
+    map.setMinZoom(13);
+    map.setMaxZoom(19);
+    // Force tiles to render correctly when container size changes (tabs, modals, hidden parents)
+    const t = setTimeout(() => map.invalidateSize(), 200);
+    const t2 = setTimeout(() => map.invalidateSize(), 600);
+    return () => { clearTimeout(t); clearTimeout(t2); };
   }, []);
 
   useEffect(() => {

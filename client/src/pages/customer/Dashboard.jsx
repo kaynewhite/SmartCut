@@ -3,35 +3,48 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
+import toast from 'react-hot-toast';
 import { Calendar, Clock, Star, Search, ArrowRight, Scissors, MapPin, Gift, TrendingUp, Bell } from 'lucide-react';
 import styles from './Dashboard.module.css';
 
 export default function CustomerDashboard() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [appointments, setAppointments] = useState([]);
-  const [recentShops, setRecentShops] = useState([]);
   const [topServices, setTopServices] = useState([]);
+  const [promos, setPromos] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [redeeming, setRedeeming] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [apptRes, shopsRes, topRes, remRes] = await Promise.all([
-          api.get('/appointments/my'),
-          api.get('/barbershops'),
-          api.get('/appointments/top-services?limit=4'),
-          api.get('/appointments/reminders')
-        ]);
-        setAppointments(apptRes.data.slice(0, 3));
-        setRecentShops(shopsRes.data.slice(0, 6));
-        setTopServices(topRes.data || []);
-        setReminders(remRes.data || []);
-      } catch {}
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
+  const fetchAll = async () => {
+    try {
+      const [apptRes, topRes, promoRes, remRes] = await Promise.all([
+        api.get('/appointments/my'),
+        api.get('/appointments/top-services?limit=8'),
+        api.get('/loyalty-promos'),
+        api.get('/appointments/reminders')
+      ]);
+      setAppointments(apptRes.data.slice(0, 3));
+      setTopServices(topRes.data || []);
+      setPromos(promoRes.data || []);
+      setReminders(remRes.data || []);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAll(); }, []);
+
+  const redeem = async (promo) => {
+    if ((user?.loyalty_points || 0) < promo.points_cost) return toast.error(`You need ${promo.points_cost} points`);
+    if (!confirm(`Redeem "${promo.name}" for ${promo.points_cost} points?`)) return;
+    setRedeeming(promo.id);
+    try {
+      const res = await api.post(`/loyalty-promos/${promo.id}/redeem`);
+      toast.success(`Redeemed! Your code: ${res.data.redemption_code}`);
+      updateUser({ loyalty_points: (user?.loyalty_points || 0) - promo.points_cost });
+    } catch (err) { toast.error(err.response?.data?.message || 'Redemption failed'); }
+    finally { setRedeeming(null); }
+  };
 
   const upcoming = appointments.filter(a => ['pending','confirmed','in_progress'].includes(a.status));
   const statusColors = { pending: 'warning', confirmed: 'success', in_progress: 'info', completed: 'success', cancelled: 'error', no_show: 'error' };
@@ -123,52 +136,25 @@ export default function CustomerDashboard() {
           }
         </section>
 
-        {topServices.length > 0 && (
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2><TrendingUp size={18} style={{display:'inline',verticalAlign:'-3px',marginRight:6,color:'#d4af37'}}/>Top Services</h2>
-              <Link to="/customer/explore" className={styles.viewAll}>Browse <ArrowRight size={14} /></Link>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:16}}>
-              {topServices.map(s => (
-                <Link key={s.id} to={`/customer/barbershop/${s.barbershop_id}`} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden',textDecoration:'none',color:'inherit'}}>
-                  {s.image_url ? <img src={s.image_url} alt={s.name} style={{width:'100%',height:120,objectFit:'cover'}}/>
-                    : <div style={{height:120,background:'linear-gradient(135deg,#1a2234,#2d3748)',display:'flex',alignItems:'center',justifyContent:'center'}}><Scissors size={32} color="#d4af37"/></div>}
-                  <div style={{padding:12}}>
-                    <div style={{fontWeight:600,fontSize:14}}>{s.name}</div>
-                    <div style={{fontSize:11,color:'#8b92a9',marginTop:2}}>{s.barbershop_name}</div>
-                    <div style={{display:'flex',justifyContent:'space-between',marginTop:6}}>
-                      <span style={{color:'#d4af37',fontWeight:700,fontSize:13}}>₱{parseFloat(s.price).toFixed(0)}</span>
-                      <span style={{fontSize:11,color:'#8b92a9'}}>{s.booking_count} bookings</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2>Available Barbershops</h2>
-            <Link to="/customer/explore" className={styles.viewAll}>See All <ArrowRight size={14} /></Link>
+            <h2><TrendingUp size={18} style={{display:'inline',verticalAlign:'-3px',marginRight:6,color:'#d4af37'}}/>Featured Services</h2>
+            <Link to="/customer/explore" className={styles.viewAll}>Browse All <ArrowRight size={14} /></Link>
           </div>
-          {recentShops.length === 0 && !loading ? (
-            <div className={styles.empty}><p>No barbershops available yet.</p></div>
+          {topServices.length === 0 && !loading ? (
+            <div className={styles.empty}><Scissors size={40} color="#374151"/><p>No services available yet.</p></div>
           ) : (
-            <div className={styles.shopGrid}>
-              {recentShops.map(shop => (
-                <Link key={shop.id} to={`/customer/barbershop/${shop.id}`} className={styles.shopCard}>
-                  <div className={styles.shopCover}>
-                    {shop.logo_url ? <img src={shop.logo_url} alt={shop.name} /> : <Scissors size={32} color="#4b5563" />}
-                  </div>
-                  <div className={styles.shopInfo}>
-                    <div className={styles.shopName}>{shop.name}</div>
-                    <div className={styles.shopLocation}><MapPin size={12} /> {shop.city || shop.address || 'Location N/A'}</div>
-                    <div className={styles.shopRating}>
-                      <Star size={12} fill="#f59e0b" color="#f59e0b" />
-                      <span>{parseFloat(shop.avg_rating || 0).toFixed(1)}</span>
-                      <span className={styles.reviewCount}>({shop.review_count || 0} reviews)</span>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:16}}>
+              {topServices.map(s => (
+                <Link key={s.id} to={`/customer/barbershop/${s.barbershop_id}`} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden',textDecoration:'none',color:'inherit',transition:'transform .15s'}}>
+                  {s.image_url ? <img src={s.image_url} alt={s.name} style={{width:'100%',height:140,objectFit:'cover'}}/>
+                    : <div style={{height:140,background:'linear-gradient(135deg,#1a2234,#2d3748)',display:'flex',alignItems:'center',justifyContent:'center'}}><Scissors size={36} color="#d4af37"/></div>}
+                  <div style={{padding:14}}>
+                    <div style={{fontWeight:600,fontSize:14,color:'#f0f0f0'}}>{s.name}</div>
+                    <div style={{fontSize:12,color:'#8b92a9',marginTop:3,display:'flex',alignItems:'center',gap:4}}><MapPin size={11}/>{s.barbershop_name}</div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
+                      <span style={{color:'#d4af37',fontWeight:700,fontSize:15}}>₱{parseFloat(s.price).toFixed(0)}</span>
+                      <span style={{fontSize:11,color:'#8b92a9'}}>{s.booking_count} booking{s.booking_count!==1?'s':''}</span>
                     </div>
                   </div>
                 </Link>
@@ -176,6 +162,38 @@ export default function CustomerDashboard() {
             </div>
           )}
         </section>
+
+        {promos.length > 0 && (
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2><Gift size={18} style={{display:'inline',verticalAlign:'-3px',marginRight:6,color:'#d4af37'}}/>Loyalty Rewards</h2>
+              <span style={{fontSize:12,color:'#d4af37'}}>{user?.loyalty_points || 0} pts available</span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:16}}>
+              {promos.map(p => {
+                const canAfford = (user?.loyalty_points || 0) >= p.points_cost;
+                return (
+                  <div key={p.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden'}}>
+                    {p.image_url ? <img src={p.image_url} alt={p.name} style={{width:'100%',height:130,objectFit:'cover'}}/>
+                      : <div style={{height:130,background:'linear-gradient(135deg,#d4af37,#a8841d)',display:'flex',alignItems:'center',justifyContent:'center'}}><Gift size={40} color="#0f1422"/></div>}
+                    <div style={{padding:14}}>
+                      <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
+                      <div style={{fontSize:12,color:'#8b92a9',marginTop:2}}>{p.barbershop_name}</div>
+                      {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
+                        <span style={{color:'#d4af37',fontWeight:700,fontSize:14,display:'inline-flex',alignItems:'center',gap:4}}><Gift size={12}/>{p.points_cost} pts</span>
+                        <button onClick={() => redeem(p)} disabled={!canAfford || redeeming === p.id}
+                          style={{padding:'6px 12px',background:canAfford?'#d4af37':'#374151',color:canAfford?'#0f1422':'#8b92a9',border:'none',borderRadius:4,fontWeight:700,fontSize:12,cursor:canAfford?'pointer':'not-allowed'}}>
+                          {redeeming === p.id ? '...' : canAfford ? 'Redeem' : 'Need more'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </div>
     </Layout>
   );

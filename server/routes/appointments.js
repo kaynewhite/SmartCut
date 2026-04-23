@@ -257,10 +257,14 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
     const result = await pool.query('UPDATE appointments SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id]);
 
     if (status === 'completed' && result.rows[0].customer_id) {
-      const points = 10;
+      const points = 1;
       await pool.query('UPDATE customers SET loyalty_points = loyalty_points + $1 WHERE id = $2', [points, result.rows[0].customer_id]);
       await pool.query(`INSERT INTO loyalty_transactions (customer_id, points, type, description) VALUES ($1,$2,'earned',$3)`,
         [result.rows[0].customer_id, points, `Completed appointment #${req.params.id}`]);
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('customer',$1,'+1 Loyalty Point','You earned 1 loyalty point for completing your appointment. Use points to redeem promos!','loyalty',$2)`,
+        [result.rows[0].customer_id, req.params.id]
+      );
     }
     if (status === 'no_show' && result.rows[0].customer_id) {
       await pool.query('UPDATE customers SET no_show_count = no_show_count + 1 WHERE id = $1', [result.rows[0].customer_id]);

@@ -28,6 +28,7 @@ app.use('/api/customers', require('./routes/customers'));
 app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/bans', require('./routes/bans'));
 app.use('/api/customer-ratings', require('./routes/customerRatings'));
+app.use('/api/loyalty-promos', require('./routes/loyaltyPromos'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 

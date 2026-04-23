@@ -24,6 +24,7 @@ import BarbershopServices from './pages/barbershop/Services';
 import BarbershopQueue from './pages/barbershop/Queue';
 import BarbershopSettings from './pages/barbershop/Settings';
 import BarbershopReviews from './pages/barbershop/Reviews';
+import BarbershopPromos from './pages/barbershop/Promos';
 
 import BarberLogin from './pages/barber/Login';
 import BarberDashboard from './pages/barber/Dashboard';
@@ -78,6 +79,7 @@ function AppRoutes() {
       <Route path="/barbershop/queue" element={<ProtectedBarbershop><BarbershopQueue /></ProtectedBarbershop>} />
       <Route path="/barbershop/settings" element={<ProtectedBarbershop><BarbershopSettings /></ProtectedBarbershop>} />
       <Route path="/barbershop/reviews" element={<ProtectedBarbershop><BarbershopReviews /></ProtectedBarbershop>} />
+      <Route path="/barbershop/promos" element={<ProtectedBarbershop><BarbershopPromos /></ProtectedBarbershop>} />
 
       <Route path="/barber/login" element={user ? <Navigate to={dashFor(user.type)} /> : <BarberLogin />} />
       <Route path="/barber/dashboard" element={<ProtectedBarber><BarberDashboard /></ProtectedBarber>} />

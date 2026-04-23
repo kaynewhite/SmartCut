@@ -156,6 +156,28 @@ CREATE TABLE IF NOT EXISTS loyalty_transactions (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS loyalty_promos (
+  id SERIAL PRIMARY KEY,
+  barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  points_cost INTEGER NOT NULL,
+  image_url TEXT,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+  promo_id INTEGER REFERENCES loyalty_promos(id) ON DELETE CASCADE,
+  barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE CASCADE,
+  points_spent INTEGER NOT NULL,
+  redemption_code TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS payment_methods (
   id SERIAL PRIMARY KEY,
   barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE CASCADE,
