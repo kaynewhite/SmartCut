@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "bash"]
+modules = ["nodejs-20", "web", "bash", "postgresql-16"]
 
 [workflows]
 runButton = "Project"
@@ -42,3 +42,8 @@ stack = "BEST_EFFORT_FALLBACK"
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+JWT_SECRET = "smartcut_jwt_secret_key_2024"
