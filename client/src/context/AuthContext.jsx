@@ -38,7 +38,13 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, updateUser, loading, isCustomer: user?.type === 'customer', isBarbershop: user?.type === 'barbershop' }}>
+    <AuthContext.Provider value={{
+      user, token, login, logout, updateUser, loading,
+      isCustomer: user?.type === 'customer',
+      isBarbershop: user?.type === 'barbershop',
+      isBarber: user?.type === 'barber',
+      isAdmin: user?.type === 'admin',
+    }}>
       {children}
     </AuthContext.Provider>
   );

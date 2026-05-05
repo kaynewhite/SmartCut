@@ -11,7 +11,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-router.get('/barbershop/:barbershopId', async (req, res) => {
+router.get('/:barbershopId', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT * FROM payment_methods WHERE barbershop_id = $1 AND is_active = true ORDER BY id',

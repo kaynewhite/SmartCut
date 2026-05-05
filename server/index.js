@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const pool = require('./db');
 
 const app = express();
@@ -29,10 +30,28 @@ app.use('/api/payment-methods', require('./routes/paymentMethods'));
 app.use('/api/bans', require('./routes/bans'));
 app.use('/api/customer-ratings', require('./routes/customerRatings'));
 app.use('/api/loyalty-promos', require('./routes/loyaltyPromos'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/subscriptions', require('./routes/subscriptions'));
+app.use('/api/reports', require('./routes/reports'));
+app.use('/api/barber-ratings', require('./routes/barberRatings'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
-pool.query('SELECT NOW()').then(() => {
+async function seedAdmin() {
+  try {
+    const email = (process.env.ADMIN_EMAIL || 'admin@smartcut.com').toLowerCase();
+    const password = process.env.ADMIN_PASSWORD || 'Admin@SmartCut2024';
+    const existing = await pool.query('SELECT id FROM admins WHERE email=$1', [email]);
+    if (!existing.rows.length) {
+      const hash = await bcrypt.hash(password, 10);
+      await pool.query('INSERT INTO admins (name, email, password) VALUES ($1,$2,$3)', ['Admin', email, hash]);
+      console.log(`Admin account created: ${email}`);
+    }
+  } catch (err) { console.error('Admin seed error:', err.message); }
+}
+
+pool.query('SELECT NOW()').then(async () => {
+  await seedAdmin();
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`SmartCut API running on port ${PORT}`);
   });

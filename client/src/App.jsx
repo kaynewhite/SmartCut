@@ -32,37 +32,68 @@ import BarberProfile from './pages/barber/Profile';
 import BarberReviews from './pages/barber/Reviews';
 import BarberServicesPage from './pages/barber/Services';
 
+import AdminLogin from './pages/admin/Login';
+import AdminDashboard from './pages/admin/Dashboard';
+import AdminBarbershops from './pages/admin/Barbershops';
+import AdminReports from './pages/admin/Reports';
+import AdminSettings from './pages/admin/Settings';
+
+const Loader = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#080e1a', color: '#d4af37', fontSize: 18 }}>
+    Loading...
+  </div>
+);
+
 function ProtectedCustomer({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#d4af37' }}>Loading...</div>;
+  if (loading) return <Loader />;
   if (!user || user.type !== 'customer') return <Navigate to="/customer/login" replace />;
   return children;
 }
 
 function ProtectedBarbershop({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#d4af37' }}>Loading...</div>;
+  if (loading) return <Loader />;
   if (!user || user.type !== 'barbershop') return <Navigate to="/barbershop/login" replace />;
   return children;
 }
 
 function ProtectedBarber({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#d4af37' }}>Loading...</div>;
+  if (loading) return <Loader />;
   if (!user || user.type !== 'barber') return <Navigate to="/barber/login" replace />;
+  return children;
+}
+
+function ProtectedAdmin({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Loader />;
+  if (!user || user.type !== 'admin') return <Navigate to="/admin-login" replace />;
   return children;
 }
 
 function AppRoutes() {
   const { user } = useAuth();
-  const dashFor = (t) => t === 'customer' ? '/customer/dashboard' : t === 'barber' ? '/barber/dashboard' : '/barbershop/dashboard';
+  const dashFor = (t) => {
+    if (t === 'customer') return '/customer/dashboard';
+    if (t === 'barber') return '/barber/dashboard';
+    if (t === 'barbershop') return '/barbershop/dashboard';
+    if (t === 'admin') return '/admin/dashboard';
+    return '/';
+  };
+
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
 
+      <Route path="/admin-login" element={user?.type === 'admin' ? <Navigate to="/admin/dashboard" /> : <AdminLogin />} />
+      <Route path="/admin/dashboard" element={<ProtectedAdmin><AdminDashboard /></ProtectedAdmin>} />
+      <Route path="/admin/barbershops" element={<ProtectedAdmin><AdminBarbershops /></ProtectedAdmin>} />
+      <Route path="/admin/reports" element={<ProtectedAdmin><AdminReports /></ProtectedAdmin>} />
+      <Route path="/admin/settings" element={<ProtectedAdmin><AdminSettings /></ProtectedAdmin>} />
+
       <Route path="/customer/login" element={user ? <Navigate to={dashFor(user.type)} /> : <CustomerLogin />} />
       <Route path="/customer/register" element={user ? <Navigate to={dashFor(user.type)} /> : <CustomerRegister />} />
-
       <Route path="/customer/dashboard" element={<ProtectedCustomer><CustomerDashboard /></ProtectedCustomer>} />
       <Route path="/customer/explore" element={<ProtectedCustomer><CustomerExplore /></ProtectedCustomer>} />
       <Route path="/customer/barbershop/:id" element={<ProtectedCustomer><CustomerBarbershop /></ProtectedCustomer>} />
@@ -74,7 +105,6 @@ function AppRoutes() {
 
       <Route path="/barbershop/login" element={user ? <Navigate to={dashFor(user.type)} /> : <BarbershopLogin />} />
       <Route path="/barbershop/register" element={user ? <Navigate to={dashFor(user.type)} /> : <BarbershopRegister />} />
-
       <Route path="/barbershop/dashboard" element={<ProtectedBarbershop><BarbershopDashboard /></ProtectedBarbershop>} />
       <Route path="/barbershop/appointments" element={<ProtectedBarbershop><BarbershopAppointments /></ProtectedBarbershop>} />
       <Route path="/barbershop/barbers" element={<ProtectedBarbershop><BarbershopBarbers /></ProtectedBarbershop>} />

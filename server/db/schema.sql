@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS customers (
   loyalty_points INTEGER DEFAULT 0,
   rating NUMERIC(3,2) DEFAULT 5.0,
   no_show_count INTEGER DEFAULT 0,
+  subscription_status TEXT DEFAULT 'inactive',
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -29,7 +30,56 @@ CREATE TABLE IF NOT EXISTS barbershops (
   longitude NUMERIC(10,7),
   downpayment_percent INTEGER DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
+  subscription_status TEXT DEFAULT 'inactive',
+  rating NUMERIC(3,2) DEFAULT 5.0,
   created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS admins (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id SERIAL PRIMARY KEY,
+  subscriber_type TEXT NOT NULL,
+  subscriber_id INTEGER NOT NULL,
+  status TEXT DEFAULT 'pending',
+  payment_proof_url TEXT,
+  admin_note TEXT,
+  reviewed_by INTEGER,
+  expires_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS admin_qr_codes (
+  id SERIAL PRIMARY KEY,
+  admin_id INTEGER,
+  type TEXT NOT NULL,
+  account_name TEXT,
+  qr_url TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS feedback_reports (
+  id SERIAL PRIMARY KEY,
+  reporter_type TEXT NOT NULL,
+  reporter_id INTEGER NOT NULL,
+  report_type TEXT NOT NULL,
+  target_type TEXT,
+  target_id INTEGER,
+  subject TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status TEXT DEFAULT 'open',
+  admin_response TEXT,
+  reviewed_by INTEGER,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS barbers (
@@ -124,6 +174,16 @@ CREATE TABLE IF NOT EXISTS ratings (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS barber_customer_ratings (
+  id SERIAL PRIMARY KEY,
+  barber_id INTEGER REFERENCES barbers(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+  appointment_id INTEGER REFERENCES appointments(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL,
+  comment TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS customer_ratings (
   id SERIAL PRIMARY KEY,
   customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
@@ -159,6 +219,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS loyalty_transactions (
   id SERIAL PRIMARY KEY,
   customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+  barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE SET NULL,
   points INTEGER NOT NULL,
   type TEXT,
   description TEXT,
