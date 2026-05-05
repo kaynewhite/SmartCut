@@ -1,6 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { ClerkProvider } from '@clerk/clerk-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 import Landing from './pages/Landing';
 
@@ -37,6 +40,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AdminBarbershops from './pages/admin/Barbershops';
 import AdminReports from './pages/admin/Reports';
 import AdminSettings from './pages/admin/Settings';
+import AdminProfile from './pages/admin/Profile';
 
 const Loader = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#080e1a', color: '#d4af37', fontSize: 18 }}>
@@ -91,6 +95,7 @@ function AppRoutes() {
       <Route path="/admin/barbershops" element={<ProtectedAdmin><AdminBarbershops /></ProtectedAdmin>} />
       <Route path="/admin/reports" element={<ProtectedAdmin><AdminReports /></ProtectedAdmin>} />
       <Route path="/admin/settings" element={<ProtectedAdmin><AdminSettings /></ProtectedAdmin>} />
+      <Route path="/admin/profile" element={<ProtectedAdmin><AdminProfile /></ProtectedAdmin>} />
 
       <Route path="/customer/login" element={user ? <Navigate to={dashFor(user.type)} /> : <CustomerLogin />} />
       <Route path="/customer/register" element={user ? <Navigate to={dashFor(user.type)} /> : <CustomerRegister />} />
@@ -126,7 +131,7 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return (
+  const inner = (
     <AuthProvider>
       <BrowserRouter>
         <Toaster position="top-right" toastOptions={{
@@ -137,4 +142,9 @@ export default function App() {
       </BrowserRouter>
     </AuthProvider>
   );
+
+  if (CLERK_KEY) {
+    return <ClerkProvider publishableKey={CLERK_KEY}>{inner}</ClerkProvider>;
+  }
+  return inner;
 }

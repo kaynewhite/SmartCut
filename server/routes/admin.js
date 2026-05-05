@@ -176,6 +176,46 @@ router.get('/qr', async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
+// ADMIN: get own profile
+router.get('/me', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, name, email, created_at FROM admins WHERE id=$1', [req.user.id]);
+    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: update own profile (name + email)
+router.put('/me', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    if (!name || !email) return res.status(400).json({ message: 'Name and email required' });
+    const conflict = await pool.query('SELECT id FROM admins WHERE email=$1 AND id!=$2', [email.toLowerCase(), req.user.id]);
+    if (conflict.rows.length) return res.status(400).json({ message: 'Email already in use' });
+    const result = await pool.query(
+      'UPDATE admins SET name=$1, email=$2 WHERE id=$3 RETURNING id, name, email',
+      [name.trim(), email.toLowerCase(), req.user.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: change own password
+router.put('/me/password', authenticateAdmin, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ message: 'Both passwords required' });
+    if (new_password.length < 6) return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    const bcrypt = require('bcryptjs');
+    const admin = await pool.query('SELECT password FROM admins WHERE id=$1', [req.user.id]);
+    const match = await bcrypt.compare(current_password, admin.rows[0].password);
+    if (!match) return res.status(400).json({ message: 'Current password is incorrect' });
+    const hash = await bcrypt.hash(new_password, 10);
+    await pool.query('UPDATE admins SET password=$1 WHERE id=$2', [hash, req.user.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+});
+
 // ADMIN: toggle barbershop active status
 router.patch('/barbershops/:id/toggle', authenticateAdmin, async (req, res) => {
   try {

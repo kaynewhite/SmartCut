@@ -11,19 +11,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-router.get('/:barbershopId', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM payment_methods WHERE barbershop_id = $1 AND is_active = true ORDER BY id',
-      [req.params.barbershopId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
+// AUTHENTICATED: all /me routes MUST come before /:barbershopId to avoid conflict
 router.get('/me', authenticateBarbershop, async (req, res) => {
   try {
     const result = await pool.query(
@@ -106,6 +94,22 @@ router.patch('/me/:id/toggle', authenticateBarbershop, async (req, res) => {
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUBLIC: get active payment methods for a shop (last — avoids catching /me)
+router.get('/:barbershopId', async (req, res) => {
+  try {
+    const id = parseInt(req.params.barbershopId);
+    if (isNaN(id)) return res.json([]);
+    const result = await pool.query(
+      'SELECT * FROM payment_methods WHERE barbershop_id = $1 AND is_active = true ORDER BY id',
+      [id]
+    );
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

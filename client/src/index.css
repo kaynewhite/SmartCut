@@ -28,7 +28,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
@@ -41,88 +41,72 @@ h1, h2, h3 {
   line-height: 1.3;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
 
-button {
-  cursor: pointer;
-  font-family: 'Inter', sans-serif;
-}
-
+/* Prevent iOS zoom on input focus */
 input, textarea, select {
-  font-family: 'Inter', sans-serif;
-  font-size: 16px; /* prevent iOS zoom */
+  font-family: inherit;
+  font-size: 16px;
 }
 
-img {
-  max-width: 100%;
-  height: auto;
-}
+img { max-width: 100%; height: auto; display: block; }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg-secondary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
-/* ── Utility classes ── */
-.gold-text { color: var(--gold); }
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
+/* ─── Page-level overflow guard ─── */
+#root {
+  overflow-x: hidden;
 }
-.badge-gold { background: rgba(212,175,55,0.15); color: var(--gold); }
-.badge-success { background: rgba(16,185,129,0.15); color: var(--success); }
-.badge-error { background: rgba(239,68,68,0.15); color: var(--error); }
-.badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
-.badge-info { background: rgba(59,130,246,0.15); color: var(--info); }
 
-/* ── Mobile: global overrides ── */
-@media (max-width: 640px) {
-  h1 { font-size: 1.5rem !important; }
-  h2 { font-size: 1.25rem !important; }
-  h3 { font-size: 1.1rem !important; }
+/* ─── Mobile global overrides ─── */
+@media (max-width: 768px) {
+  /* Any inline maxWidth container collapses cleanly */
+  [style*="maxWidth"] { max-width: 100% !important; }
 
-  /* Tables horizontal scroll on mobile */
-  table { font-size: 13px; }
-  th, td { padding: 8px 6px !important; white-space: nowrap; }
-
-  /* Stat grids become 2-col on mobile */
-  .stat-grid {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 10px !important;
+  /* Tables scroll horizontally instead of overflowing */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 13px;
   }
 
-  /* Full-width modals on mobile */
-  [data-modal] {
-    max-width: 100% !important;
-    margin: 0 !important;
-    border-radius: 12px 12px 0 0 !important;
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
+  /* Multi-column grids that use inline styles */
+  [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  [style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
-/* ── Leaflet map fixes ── */
+@media (max-width: 480px) {
+  [style*="grid-template-columns: repeat(2"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  h1 { font-size: 1.4rem !important; }
+  h2 { font-size: 1.2rem !important; }
+}
+
+/* ─── Leaflet map theme ─── */
 .leaflet-container {
   background: #0a1020 !important;
-  font-family: 'Inter', sans-serif !important;
+  font-family: inherit !important;
 }
 .leaflet-tile-pane {
-  filter: brightness(0.85) saturate(0.7);
+  filter: brightness(0.82) saturate(0.65);
 }
 .leaflet-control-attribution {
   font-size: 10px !important;
-  background: rgba(10,16,32,0.8) !important;
+  background: rgba(10,14,26,0.85) !important;
   color: #6b7280 !important;
 }
 .leaflet-control-attribution a { color: #d4af37 !important; }
@@ -132,33 +116,60 @@ img {
   border-color: #1e2a3a !important;
 }
 .leaflet-bar a:hover { background: #1e2a3a !important; }
-
-/* ── Layout nav responsive ── */
-.nav-mobile-only { display: none; }
-@media (max-width: 768px) {
-  .nav-desktop-only { display: none !important; }
-  .nav-mobile-only { display: flex !important; }
+.leaflet-popup-content-wrapper {
+  background: #0f1827 !important;
+  color: #f0f0f0 !important;
+  border: 1px solid #1e2a3a !important;
+  border-radius: 8px !important;
 }
+.leaflet-popup-tip { background: #0f1827 !important; }
 
-/* ── Form helpers ── */
-.form-input {
+/* ─── Reusable utility classes ─── */
+.gold-text { color: var(--gold); }
+
+.page-container {
+  max-width: 1100px;
   width: 100%;
-  background: #0a1020;
-  border: 1px solid #1e2a3a;
-  color: #f0f0f0;
-  padding: 11px 13px;
-  border-radius: 8px;
-  font-size: 15px;
-  transition: border-color .15s;
-  box-sizing: border-box;
 }
-.form-input:focus {
-  outline: none;
-  border-color: var(--gold);
-}
-.form-input::placeholder { color: #4b5563; }
 
-/* ── Button helpers ── */
+/* Responsive two-col grid */
+.r-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.r-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.r-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .r-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .r-grid-3 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .r-grid-2 { grid-template-columns: 1fr; }
+  .r-grid-3 { grid-template-columns: 1fr; }
+  .r-grid-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 380px) {
+  .r-grid-4 { grid-template-columns: 1fr; }
+}
+
+/* Card */
+.sc-card {
+  background: #0f1827;
+  border: 1px solid #1e2a3a;
+  border-radius: 12px;
+  padding: 18px;
+}
+
+/* Buttons */
 .btn-gold {
   padding: 12px 20px;
   background: linear-gradient(135deg, #d4af37, #a8841d);
@@ -166,12 +177,14 @@ img {
   border: none;
   border-radius: 8px;
   font-weight: 700;
-  cursor: pointer;
   font-size: 15px;
   transition: opacity .15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-gold:hover:not(:disabled) { opacity: 0.9; }
+.btn-gold:hover:not(:disabled) { opacity: 0.88; }
 
 .btn-ghost {
   padding: 10px 16px;
@@ -180,41 +193,36 @@ img {
   color: #8b92a9;
   border-radius: 8px;
   font-weight: 500;
-  cursor: pointer;
   transition: all .15s;
 }
 .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
 
-/* ── Card ── */
-.card {
-  background: #0f1827;
+/* Form inputs */
+.sc-input {
+  width: 100%;
+  background: #0a1020;
   border: 1px solid #1e2a3a;
-  border-radius: 12px;
-  padding: 20px;
+  color: #f0f0f0;
+  padding: 11px 13px;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: border-color .15s;
 }
+.sc-input:focus { outline: none; border-color: var(--gold); }
+.sc-input::placeholder { color: #4b5563; }
 
-/* ── Responsive grid helpers ── */
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
 }
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-@media (max-width: 768px) {
-  .grid-2 { grid-template-columns: 1fr; }
-  .grid-3 { grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 480px) {
-  .grid-3 { grid-template-columns: 1fr; }
-}
-
-/* ── Admin layout responsive (injected via style tags in Layout.jsx) ── */
-
-/* ── Toast overrides ── */
-.go2072408551 {
-  font-size: 14px !important;
-}
+.badge-gold    { background: rgba(212,175,55,0.15);  color: var(--gold); }
+.badge-success { background: rgba(16,185,129,0.15);  color: var(--success); }
+.badge-error   { background: rgba(239,68,68,0.15);   color: var(--error); }
+.badge-warning { background: rgba(245,158,11,0.15);  color: var(--warning); }
+.badge-info    { background: rgba(59,130,246,0.15);  color: var(--info); }
