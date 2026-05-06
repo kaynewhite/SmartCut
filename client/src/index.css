@@ -34,6 +34,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3 {
@@ -44,7 +45,7 @@ h1, h2, h3 {
 a { color: inherit; text-decoration: none; }
 button { cursor: pointer; font-family: inherit; }
 
-/* Prevent iOS zoom on input focus */
+/* Prevent iOS zoom on input focus — always 16px */
 input, textarea, select {
   font-family: inherit;
   font-size: 16px;
@@ -52,48 +53,16 @@ input, textarea, select {
 
 img { max-width: 100%; height: auto; display: block; }
 
+/* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg-secondary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 
-/* ─── Page-level overflow guard ─── */
+/* ─── Overflow guard ─── */
 #root {
   overflow-x: hidden;
-}
-
-/* ─── Mobile global overrides ─── */
-@media (max-width: 768px) {
-  /* Any inline maxWidth container collapses cleanly */
-  [style*="maxWidth"] { max-width: 100% !important; }
-
-  /* Tables scroll horizontally instead of overflowing */
-  table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    font-size: 13px;
-  }
-
-  /* Multi-column grids that use inline styles */
-  [style*="grid-template-columns: repeat(4"] {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-  [style*="grid-template-columns: repeat(3"] {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-@media (max-width: 480px) {
-  [style*="grid-template-columns: repeat(2"] {
-    grid-template-columns: 1fr !important;
-  }
-  [style*="grid-template-columns: 1fr 1fr"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  h1 { font-size: 1.4rem !important; }
-  h2 { font-size: 1.2rem !important; }
+  width: 100%;
 }
 
 /* ─── Leaflet map theme ─── */
@@ -132,7 +101,7 @@ img { max-width: 100%; height: auto; display: block; }
   width: 100%;
 }
 
-/* Responsive two-col grid */
+/* Responsive grids */
 .r-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -161,7 +130,38 @@ img { max-width: 100%; height: auto; display: block; }
   .r-grid-4 { grid-template-columns: 1fr; }
 }
 
-/* Card */
+/* ─── Global mobile overrides ─── */
+@media (max-width: 768px) {
+  /* Prevent overflow from inline max-width containers */
+  [style*="maxWidth"] { max-width: 100% !important; }
+
+  /* Tables scroll instead of causing overflow */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 13px;
+    width: 100%;
+  }
+
+  /* Prevent any fixed-width element from blowing the layout */
+  [style*="width: 380px"],
+  [style*="width: 400px"],
+  [style*="width: 500px"],
+  [style*="width: 600px"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Inline grid overrides */
+  [style*="grid-template-columns: repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+  [style*="grid-template-columns: repeat(3"] { grid-template-columns: repeat(2, 1fr) !important; }
+  [style*="grid-template-columns: 1fr 1fr"]  { grid-template-columns: 1fr !important; }
+}
+
+/* ─── Card ─── */
 .sc-card {
   background: #0f1827;
   border: 1px solid #1e2a3a;
@@ -169,7 +169,7 @@ img { max-width: 100%; height: auto; display: block; }
   padding: 18px;
 }
 
-/* Buttons */
+/* ─── Buttons ─── */
 .btn-gold {
   padding: 12px 20px;
   background: linear-gradient(135deg, #d4af37, #a8841d);
@@ -197,7 +197,7 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
 
-/* Form inputs */
+/* ─── Form inputs ─── */
 .sc-input {
   width: 100%;
   background: #0a1020;
@@ -205,13 +205,13 @@ img { max-width: 100%; height: auto; display: block; }
   color: #f0f0f0;
   padding: 11px 13px;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 16px;
   transition: border-color .15s;
 }
 .sc-input:focus { outline: none; border-color: var(--gold); }
 .sc-input::placeholder { color: #4b5563; }
 
-/* Status badges */
+/* ─── Status badges ─── */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -226,3 +226,12 @@ img { max-width: 100%; height: auto; display: block; }
 .badge-error   { background: rgba(239,68,68,0.15);   color: var(--error); }
 .badge-warning { background: rgba(245,158,11,0.15);  color: var(--warning); }
 .badge-info    { background: rgba(59,130,246,0.15);  color: var(--info); }
+
+/* ─── Mobile bottom-sheet modals (shared) ─── */
+@media (max-width: 768px) {
+  /* Any modal that uses align-items: center shifts to bottom-sheet */
+  [class*="modalBg"],
+  [class*="modal-bg"] {
+    align-items: flex-end !important;
+  }
+}

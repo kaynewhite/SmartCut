@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 24px 16px;
 }
 
 .card {
@@ -60,9 +60,10 @@
   border-radius: 10px;
   padding: 12px 14px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px;
   outline: none;
   transition: border-color 0.2s;
+  width: 100%;
 }
 
 .input:focus { border-color: var(--gold); }
@@ -73,11 +74,12 @@
   border-radius: 10px;
   padding: 12px 14px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px;
   outline: none;
   transition: border-color 0.2s;
   resize: vertical;
   min-height: 80px;
+  width: 100%;
 }
 
 .textarea:focus { border-color: var(--gold); }
@@ -87,7 +89,7 @@
   color: #0a0e1a;
   border: none;
   border-radius: 10px;
-  padding: 13px;
+  padding: 14px;
   font-weight: 700;
   font-size: 15px;
   margin-top: 8px;
@@ -132,4 +134,13 @@
   padding: 10px 14px;
   border-radius: 8px;
   font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 28px 20px;
+    border-radius: 16px;
+  }
+  .title { font-size: 22px; }
+  .logo { font-size: 20px; }
 }

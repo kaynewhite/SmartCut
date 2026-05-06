@@ -7,18 +7,18 @@
   border-radius: 16px;
   margin-bottom: 24px;
   overflow: hidden;
-  min-height: 180px;
+  min-height: 160px;
 }
 
 .coverOverlay {
   background: linear-gradient(to right, rgba(10,14,26,0.95), rgba(10,14,26,0.7));
-  padding: 28px;
+  padding: 24px;
 }
 
 .shopHeader {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  align-items: flex-start;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
@@ -36,11 +36,11 @@
 }
 .shopLogo img { width: 100%; height: 100%; object-fit: cover; }
 
-.shopName { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+.shopName { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .shopMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 10px;
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -50,7 +50,7 @@
   margin-left: auto;
   background: var(--gold);
   color: #0a0e1a;
-  padding: 10px 22px;
+  padding: 10px 20px;
   border-radius: 10px;
   font-weight: 700;
   font-size: 14px;
@@ -58,25 +58,42 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+  align-self: flex-start;
 }
 
-.body { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+.body {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
 
 .desc { color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin-bottom: 24px; }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
 
 .tab {
   background: none;
   border: none;
   color: var(--text-muted);
-  padding: 10px 20px;
+  padding: 10px 18px;
   font-size: 14px;
   font-weight: 500;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: all 0.2s;
   text-transform: capitalize;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab:hover { color: var(--text-primary); }
@@ -90,7 +107,7 @@
 .serviceCard {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -112,10 +129,10 @@
 }
 .svcImg img { width: 100%; height: 100%; object-fit: cover; }
 
-.svcInfo { flex: 1; }
+.svcInfo { flex: 1; min-width: 0; }
 .svcName { font-weight: 600; font-size: 14px; }
 .svcDesc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.svcMeta { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.svcMeta { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
 .svcPrice { font-weight: 700; color: var(--gold); font-size: 15px; }
 .svcDuration { font-size: 12px; color: var(--text-muted); }
 
@@ -123,22 +140,23 @@
   background: rgba(212,175,55,0.1);
   border: 1px solid rgba(212,175,55,0.3);
   color: var(--gold);
-  padding: 6px 16px;
+  padding: 6px 14px;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 .bookSvcBtn:hover { background: var(--gold); color: #0a0e1a; }
 
-.barberGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.barberGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
 
 .barberCard {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 20px;
+  padding: 16px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -160,7 +178,6 @@
   overflow: hidden;
 }
 .barberPhoto img { width: 100%; height: 100%; object-fit: cover; }
-
 .barberName { font-weight: 700; font-size: 14px; }
 .barberRating { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #f59e0b; font-weight: 600; }
 .specialties { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
@@ -180,6 +197,7 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .reviewAvatar {
@@ -197,7 +215,7 @@
 
 .reviewName { font-weight: 600; font-size: 13px; }
 .stars { color: #f59e0b; font-size: 14px; }
-.reviewDate { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.reviewDate { margin-left: auto; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .reviewComment { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 .reviewBarber { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
 
@@ -205,3 +223,17 @@
 .locationInfo { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
 .locationInfo h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .locationInfo p { margin: 6px 0; font-size: 14px; }
+
+@media (max-width: 600px) {
+  .body { padding: 16px; }
+  .coverOverlay { padding: 16px; }
+  .shopName { font-size: 18px; }
+  .bookBtn { margin-left: 0; width: 100%; justify-content: center; margin-top: 8px; }
+  .barberGrid { grid-template-columns: 1fr 1fr; }
+  .tab { padding: 9px 14px; font-size: 13px; }
+}
+@media (max-width: 380px) {
+  .barberGrid { grid-template-columns: 1fr; }
+  .serviceCard { flex-wrap: wrap; }
+  .bookSvcBtn { width: 100%; justify-content: center; }
+}
