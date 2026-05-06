@@ -1,9 +1,39 @@
 .page {
   min-height: 100vh;
   background: var(--bg-primary);
+  position: relative;
+  overflow-x: hidden;
 }
 
-/* Navbar */
+/* ─── Barbershop background silhouettes ─── */
+.bgLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Float animations */
+@keyframes floatA {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-16px); }
+}
+@keyframes floatB {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(12px); }
+}
+@keyframes floatC {
+  0%, 100% { transform: translate(0, 0); }
+  33%       { transform: translate(-6px, -12px); }
+  66%       { transform: translate(5px, 9px); }
+}
+
+.floatA { animation: floatA 8s  ease-in-out infinite; }
+.floatB { animation: floatB 10s ease-in-out infinite; }
+.floatC { animation: floatC 12s ease-in-out infinite; }
+
+/* ─── Navbar ─── */
 .nav {
   display: flex;
   align-items: center;
@@ -12,8 +42,8 @@
   border-bottom: 1px solid rgba(212,175,55,0.1);
   position: sticky;
   top: 0;
-  background: rgba(10,14,26,0.95);
-  backdrop-filter: blur(10px);
+  background: rgba(10,14,26,0.96);
+  backdrop-filter: blur(12px);
   z-index: 100;
 }
 
@@ -57,7 +87,7 @@
 
 .navBtnOutline:hover { background: rgba(212,175,55,0.1); }
 
-/* Hero */
+/* ─── Hero ─── */
 .hero {
   display: flex;
   align-items: center;
@@ -66,6 +96,8 @@
   gap: 60px;
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .heroContent { flex: 1; }
@@ -162,73 +194,7 @@
   margin-bottom: 24px;
 }
 
-.statsGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.statBox {
-  background: var(--bg-secondary);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: center;
-}
-
-.statNum {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--gold);
-}
-
-.statLabel {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.sampleBooking {
-  background: var(--bg-secondary);
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.bookingLabel { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-.bookingTime { font-size: 16px; font-weight: 700; color: var(--gold); margin-bottom: 12px; }
-
-.barberRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.barberAvatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: #0a0e1a;
-  flex-shrink: 0;
-}
-
-.barberName { font-size: 13px; font-weight: 600; }
-.barberSpec { font-size: 11px; color: var(--text-muted); }
-.stars { margin-left: auto; color: #f59e0b; font-size: 13px; }
-
-/* Features */
-.features {
-  padding: 100px 60px;
-  max-width: 1200px;
-  margin: 0 auto;
-  text-align: center;
-}
-
+/* ─── Shared section labels / titles ─── */
 .sectionLabel {
   display: inline-block;
   color: var(--gold);
@@ -244,6 +210,16 @@
   font-weight: 700;
   margin-bottom: 60px;
   color: var(--text-primary);
+}
+
+/* ─── Features ─── */
+.features {
+  padding: 100px 60px;
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .featureGrid {
@@ -286,7 +262,7 @@
   line-height: 1.6;
 }
 
-/* Shop Section */
+/* ─── Shop section ─── */
 .shopSection {
   background: var(--bg-secondary);
   padding: 100px 60px;
@@ -294,6 +270,8 @@
   align-items: center;
   gap: 80px;
   justify-content: center;
+  position: relative;
+  z-index: 1;
 }
 
 .shopContent { max-width: 500px; }
@@ -338,36 +316,14 @@
   font-size: 14px;
 }
 
-.dashStats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.dashStat {
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 16px;
-}
-
-.dashStat span {
-  display: block;
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--gold);
-}
-
-.dashStat small {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-/* CTA */
+/* ─── CTA ─── */
 .cta {
   text-align: center;
   padding: 100px 60px;
   max-width: 700px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .cta h2 {
@@ -389,11 +345,13 @@
   flex-wrap: wrap;
 }
 
-/* Footer */
+/* ─── Footer ─── */
 .footer {
   border-top: 1px solid var(--border);
   padding: 40px 60px;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .footerLogo {
@@ -412,6 +370,7 @@
   font-size: 13px;
 }
 
+/* ─── Responsive ─── */
 @media (max-width: 900px) {
   .nav { padding: 16px 20px; }
   .hero { flex-direction: column; padding: 60px 20px; text-align: center; }
@@ -424,4 +383,12 @@
   .shopVisual { display: none; }
   .cta { padding: 60px 20px; }
   .footer { padding: 30px 20px; }
+  .sectionTitle { font-size: 32px; }
+}
+
+@media (max-width: 480px) {
+  .heroTitle { font-size: 30px; }
+  .sectionTitle { font-size: 26px; }
+  .navLinks { gap: 8px; }
+  .navBtn, .navBtnOutline { padding: 7px 12px; font-size: 13px; }
 }

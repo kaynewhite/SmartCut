@@ -4,13 +4,97 @@ import { Scissors, Star, Calendar, Users, MapPin, ArrowRight, Shield, Zap, Trend
 import api from '../utils/api';
 import styles from './Landing.module.css';
 
+/* ─── Barbershop silhouette SVG icons ─── */
+const ScissorsIcon = ({ size = 60 }) => (
+  <svg width={size} height={size * 100 / 60} viewBox="0 0 60 100" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="16" cy="81" r="13" strokeWidth="2.5" />
+    <circle cx="16" cy="81" r="6"  strokeWidth="1.5" />
+    <circle cx="44" cy="81" r="13" strokeWidth="2.5" />
+    <circle cx="44" cy="81" r="6"  strokeWidth="1.5" />
+    <line x1="16" y1="68" x2="30" y2="42" strokeWidth="2.5" />
+    <line x1="44" y1="68" x2="30" y2="42" strokeWidth="2.5" />
+    <path d="M30 42 L11 5"  strokeWidth="2" />
+    <path d="M30 42 L49 5"  strokeWidth="2" />
+    <circle cx="30" cy="42" r="3.5" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const CombIcon = ({ size = 88 }) => (
+  <svg width={size} height={size * 36 / 88} viewBox="0 0 88 36" fill="none" stroke="currentColor" strokeLinecap="round">
+    <rect x="2" y="2" width="84" height="18" rx="4" strokeWidth="2.5" />
+    {[8, 18, 28, 38, 48, 58, 68, 78].map(x => (
+      <rect key={x} x={x} y="19" width="5" height="14" rx="2.5" fill="currentColor" stroke="none" />
+    ))}
+  </svg>
+);
+
+const RazorIcon = ({ size = 100 }) => (
+  <svg width={size} height={size * 32 / 100} viewBox="0 0 100 32" fill="none" stroke="currentColor" strokeLinejoin="round">
+    <path d="M10 16 L23 2 Q27 0 31 0 L69 0 Q73 0 77 2 L90 16 L77 30 Q73 32 69 32 L31 32 Q27 32 23 30 Z" strokeWidth="2.5" />
+    <ellipse cx="50" cy="16" rx="22" ry="9" strokeWidth="1.5" />
+  </svg>
+);
+
+const BarberPoleIcon = ({ size = 80 }) => (
+  <svg width={size * 26 / 80} height={size} viewBox="0 0 26 80" fill="none" stroke="currentColor" strokeLinecap="round">
+    <rect x="3" y="8" width="20" height="64" rx="10" strokeWidth="2" />
+    <ellipse cx="13" cy="8"  rx="11" ry="4" strokeWidth="2" />
+    <ellipse cx="13" cy="72" rx="11" ry="4" strokeWidth="2" />
+    <path d="M4 26 Q13 22 22 18" strokeWidth="1.8" />
+    <path d="M4 44 Q13 40 22 36" strokeWidth="1.8" />
+    <path d="M4 62 Q13 58 22 54" strokeWidth="1.8" />
+  </svg>
+);
+
+/* icon layout: { Icon, size(px), left/right %, top %, rotate deg, anim class, delay } */
+const BG_ICONS = [
+  { Icon: ScissorsIcon,   size: 105, left: '2%',   top: '10%', rotate: -32, anim: 'floatA', delay: '0s'   },
+  { Icon: CombIcon,       size: 90,  right: '3%',  top: '7%',  rotate:  18, anim: 'floatB', delay: '1.5s' },
+  { Icon: RazorIcon,      size: 84,  left: '4%',   top: '37%', rotate:  48, anim: 'floatC', delay: '3s'   },
+  { Icon: BarberPoleIcon, size: 80,  right: '4%',  top: '27%', rotate:  -9, anim: 'floatA', delay: '2s'   },
+  { Icon: ScissorsIcon,   size: 52,  left: '47%',  top: '3%',  rotate:  65, anim: 'floatB', delay: '0.8s' },
+  { Icon: CombIcon,       size: 65,  right: '7%',  top: '54%', rotate: -44, anim: 'floatC', delay: '4s'   },
+  { Icon: RazorIcon,      size: 60,  left: '3%',   top: '61%', rotate: -24, anim: 'floatA', delay: '1s'   },
+  { Icon: ScissorsIcon,   size: 78,  right: '2%',  top: '71%', rotate:  20, anim: 'floatB', delay: '5s'   },
+  { Icon: BarberPoleIcon, size: 68,  left: '44%',  top: '77%', rotate:  13, anim: 'floatC', delay: '2.5s' },
+  { Icon: CombIcon,       size: 95,  left: '2%',   top: '84%', rotate:  30, anim: 'floatA', delay: '3.5s' },
+  { Icon: RazorIcon,      size: 70,  right: '4%',  top: '89%', rotate:  58, anim: 'floatB', delay: '6s'   },
+  { Icon: ScissorsIcon,   size: 44,  left: '24%',  top: '51%', rotate: -55, anim: 'floatC', delay: '4.5s' },
+  { Icon: CombIcon,       size: 50,  right: '21%', top: '41%', rotate:  72, anim: 'floatA', delay: '7s'   },
+  { Icon: RazorIcon,      size: 55,  left: '60%',  top: '20%', rotate: -30, anim: 'floatB', delay: '5.5s' },
+];
+
 export default function Landing() {
   const [topServices, setTopServices] = useState([]);
   useEffect(() => {
     api.get('/appointments/top-services?limit=6').then(r => setTopServices(r.data || [])).catch(() => {});
   }, []);
+
   return (
     <div className={styles.page}>
+
+      {/* ─── Barbershop background silhouettes ─── */}
+      <div className={styles.bgLayer} aria-hidden="true">
+        {BG_ICONS.map((item, i) => (
+          <div
+            key={i}
+            className={styles[item.anim]}
+            style={{
+              position: 'absolute',
+              left:  item.left,
+              right: item.right,
+              top:   item.top,
+              animationDelay: item.delay,
+            }}
+          >
+            <div style={{ transform: `rotate(${item.rotate}deg)`, color: '#d4af37', opacity: 0.055 }}>
+              <item.Icon size={item.size} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ─── Navbar ─── */}
       <nav className={styles.nav}>
         <div className={styles.navLogo}>
           <Scissors size={24} color="#d4af37" />
@@ -22,6 +106,7 @@ export default function Landing() {
         </div>
       </nav>
 
+      {/* ─── Hero ─── */}
       <section className={styles.hero}>
         <div className={styles.heroContent}>
           <div className={styles.badge}>
@@ -58,24 +143,26 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ─── Top Services ─── */}
       {topServices.length > 0 && (
-        <section style={{padding:'60px 8%',background:'#0f1422'}}>
-          <div style={{textAlign:'center',marginBottom:36}}>
-            <div className={styles.sectionLabel}><TrendingUp size={14} style={{display:'inline',marginRight:6}}/>Most Booked</div>
+        <section style={{ padding: '60px 8%', background: '#0f1422', position: 'relative' }}>
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div className={styles.sectionLabel}><TrendingUp size={14} style={{ display: 'inline', marginRight: 6 }} />Most Booked</div>
             <h2 className={styles.sectionTitle}>Top Services Right Now</h2>
-            <p style={{color:'#8b92a9',marginTop:8}}>Based on real booking counts across our barbershops</p>
+            <p style={{ color: '#8b92a9', marginTop: 8 }}>Based on real booking counts across our barbershops</p>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:20}}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 20 }}>
             {topServices.map(s => (
-              <div key={s.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden'}}>
-                {s.image_url ? <img src={s.image_url} alt={s.name} style={{width:'100%',height:140,objectFit:'cover'}} />
-                  : <div style={{height:140,background:'linear-gradient(135deg,#1a2234,#2d3748)',display:'flex',alignItems:'center',justifyContent:'center'}}><Scissors size={40} color="#d4af37"/></div>}
-                <div style={{padding:16}}>
-                  <div style={{fontWeight:700,color:'#f0f0f0'}}>{s.name}</div>
-                  <div style={{fontSize:12,color:'#8b92a9',marginTop:4}}>{s.barbershop_name} · {s.barbershop_city}</div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
-                    <span style={{color:'#d4af37',fontWeight:700}}>₱{parseFloat(s.price).toFixed(0)}</span>
-                    <span style={{fontSize:12,color:'#8b92a9'}}>{s.booking_count} bookings</span>
+              <div key={s.id} style={{ background: '#1a2234', border: '1px solid #2d3748', borderRadius: 10, overflow: 'hidden' }}>
+                {s.image_url
+                  ? <img src={s.image_url} alt={s.name} style={{ width: '100%', height: 140, objectFit: 'cover' }} />
+                  : <div style={{ height: 140, background: 'linear-gradient(135deg,#1a2234,#2d3748)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Scissors size={40} color="#d4af37" /></div>}
+                <div style={{ padding: 16 }}>
+                  <div style={{ fontWeight: 700, color: '#f0f0f0' }}>{s.name}</div>
+                  <div style={{ fontSize: 12, color: '#8b92a9', marginTop: 4 }}>{s.barbershop_name} · {s.barbershop_city}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                    <span style={{ color: '#d4af37', fontWeight: 700 }}>₱{parseFloat(s.price).toFixed(0)}</span>
+                    <span style={{ fontSize: 12, color: '#8b92a9' }}>{s.booking_count} bookings</span>
                   </div>
                 </div>
               </div>
@@ -84,6 +171,7 @@ export default function Landing() {
         </section>
       )}
 
+      {/* ─── Features ─── */}
       <section className={styles.features}>
         <div className={styles.sectionLabel}>Why SmartCut?</div>
         <h2 className={styles.sectionTitle}>Everything You Need<br />in One Platform</h2>
@@ -105,6 +193,7 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ─── Shop Section ─── */}
       <section className={styles.shopSection}>
         <div className={styles.shopContent}>
           <div className={styles.sectionLabel}>For Barbershops</div>
@@ -138,6 +227,7 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ─── CTA ─── */}
       <section className={styles.cta}>
         <Scissors size={48} color="#d4af37" />
         <h2>Ready to Experience SmartCut?</h2>
@@ -148,6 +238,7 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ─── Footer ─── */}
       <footer className={styles.footer}>
         <div className={styles.footerLogo}>
           <Scissors size={18} color="#d4af37" />
