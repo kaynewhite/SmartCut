@@ -1,9 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { ClerkProvider } from '@clerk/clerk-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-
-const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 import Landing from './pages/Landing';
 
@@ -131,7 +128,7 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const inner = (
+  return (
     <AuthProvider>
       <BrowserRouter>
         <Toaster position="top-right" toastOptions={{
@@ -142,9 +139,4 @@ export default function App() {
       </BrowserRouter>
     </AuthProvider>
   );
-
-  if (CLERK_KEY) {
-    return <ClerkProvider publishableKey={CLERK_KEY}>{inner}</ClerkProvider>;
-  }
-  return inner;
 }
