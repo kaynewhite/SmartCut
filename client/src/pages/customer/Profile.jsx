@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare } from 'lucide-react';
+import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon } from 'lucide-react';
 
 const TAB_LIST = ['profile', 'loyalty', 'subscription', 'reports'];
 
@@ -69,28 +69,40 @@ export default function CustomerProfile() {
     finally { setSubmittingReport(false); }
   };
 
-  const STATUS_BADGE = {
-    active: { bg: 'rgba(16,185,129,0.1)', color: '#10b981', label: '● Active' },
-    pending: { bg: 'rgba(245,158,11,0.1)', color: '#f59e0b', label: '⏳ Pending Review' },
-    inactive: { bg: 'rgba(239,68,68,0.1)', color: '#ef4444', label: '✕ Inactive' },
+  // Determine subscription display
+  const subState = subStatus?.is_active ? 'active'
+    : subStatus?.subscription?.status === 'pending' ? 'pending'
+    : user?.subscription_status === 'restricted' ? 'restricted'
+    : 'inactive';
+
+  const SUB_BADGE = {
+    active:     { bg: 'rgba(16,185,129,0.12)', border: '#10b981', color: '#10b981', icon: <CheckCircle size={13} />, label: 'Active Subscriber' },
+    pending:    { bg: 'rgba(245,158,11,0.12)', border: '#f59e0b', color: '#f59e0b', icon: <Clock size={13} />, label: 'Pending Approval' },
+    restricted: { bg: 'rgba(239,68,68,0.12)', border: '#ef4444', color: '#ef4444', icon: <ShieldAlert size={13} />, label: 'Account Restricted' },
+    inactive:   { bg: 'rgba(107,114,128,0.1)', border: '#374151', color: '#6b7280', icon: <CreditCard size={13} />, label: 'Not Subscribed' },
   };
+  const subBadge = SUB_BADGE[subState];
 
   return (
     <Layout>
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 16px' }}>
+        {/* Profile header */}
         <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 14, padding: 24, marginBottom: 20, textAlign: 'center' }}>
           <div style={{ width: 68, height: 68, borderRadius: '50%', background: 'rgba(212,175,55,0.15)', border: '2px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 28, color: '#d4af37', fontWeight: 700 }}>
             {user?.name?.charAt(0)?.toUpperCase()}
           </div>
           <div style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 18 }}>{user?.name}</div>
           <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>{user?.email}</div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+            {/* Loyalty points */}
             <span style={{ padding: '4px 12px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 20, color: '#d4af37', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Gift size={12} /> {loyalty.total_points} pts total
             </span>
-            {user?.subscription_status === 'active' && (
-              <span style={{ padding: '4px 12px', background: 'rgba(16,185,129,0.1)', border: '1px solid #10b981', borderRadius: 20, color: '#10b981', fontSize: 12 }}>● Subscribed</span>
-            )}
+            {/* Subscription status badge */}
+            <span style={{ padding: '4px 12px', background: subBadge.bg, border: `1px solid ${subBadge.border}`, borderRadius: 20, color: subBadge.color, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {subBadge.icon} {subBadge.label}
+            </span>
+            {/* No-show badge */}
             {user?.no_show_count > 0 && (
               <span style={{ padding: '4px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 20, color: '#ef4444', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <AlertCircle size={12} /> {user.no_show_count} no-shows
@@ -99,10 +111,14 @@ export default function CustomerProfile() {
           </div>
         </div>
 
+        {/* Tabs */}
         <div style={{ display: 'flex', gap: 0, background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
           {TAB_LIST.map((t, i) => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 6px', background: tab === t ? 'rgba(212,175,55,0.1)' : 'transparent', border: 'none', borderRight: i < TAB_LIST.length - 1 ? '1px solid #1e2a3a' : 'none', color: tab === t ? '#d4af37' : '#8b92a9', cursor: 'pointer', fontWeight: tab === t ? 600 : 400, fontSize: 13, textTransform: 'capitalize' }}>
               {t}
+              {t === 'subscription' && subState !== 'active' && subState !== 'inactive' && (
+                <span style={{ marginLeft: 4, width: 7, height: 7, borderRadius: '50%', background: subState === 'pending' ? '#f59e0b' : '#ef4444', display: 'inline-block', verticalAlign: 'middle' }} />
+              )}
             </button>
           ))}
         </div>
@@ -134,7 +150,7 @@ export default function CustomerProfile() {
             </div>
             <p style={{ color: '#8b92a9', fontSize: 13, marginBottom: 16 }}>Points are earned per barbershop. Visit individual shop pages to redeem promos.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {loyalty.history?.length === 0 ? (
+              {!loyalty.history?.length ? (
                 <div style={{ textAlign: 'center', padding: '30px 0', color: '#8b92a9', fontSize: 13 }}>No loyalty transactions yet</div>
               ) : loyalty.history?.map(t => (
                 <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#0a1020', borderRadius: 8 }}>
@@ -153,49 +169,46 @@ export default function CustomerProfile() {
 
         {tab === 'subscription' && (
           <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
-            <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Subscription</h2>
-            <p style={{ color: '#8b92a9', fontSize: 13, marginBottom: 18 }}>Subscribe to unlock map view and discover barbershops near you.</p>
+            <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Subscription</h2>
+            <p style={{ color: '#8b92a9', fontSize: 13, marginBottom: 18, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <MapIcon size={14} color="#d4af37" /> Subscribe to unlock map view and discover barbershops near you.
+            </p>
 
-            {subStatus?.is_active ? (
-              <div style={{ padding: 18, background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10, marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                  <CheckCircle size={20} color="#10b981" />
-                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: 16 }}>Subscription Active</div>
+            {/* Status Card */}
+            <div style={{ padding: '14px 18px', background: subBadge.bg, border: `1px solid ${subBadge.border}`, borderRadius: 10, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 24 }}>
+                {subState === 'active' ? '✅' : subState === 'pending' ? '⏳' : subState === 'restricted' ? '⛔' : '🔒'}
+              </div>
+              <div>
+                <div style={{ color: subBadge.color, fontWeight: 700, fontSize: 15 }}>
+                  {subState === 'active' ? 'Subscription Active' : subState === 'pending' ? 'Payment Under Review' : subState === 'restricted' ? 'Account Restricted' : 'Not Subscribed'}
                 </div>
-                <div style={{ color: '#8b92a9', fontSize: 13 }}>
-                  {subStatus.subscription?.expires_at && `Expires: ${new Date(subStatus.subscription.expires_at).toLocaleDateString()}`}
+                <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 2 }}>
+                  {subState === 'active' && subStatus?.subscription?.expires_at && `Expires: ${new Date(subStatus.subscription.expires_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}`}
+                  {subState === 'pending' && 'Your payment proof has been submitted. Admin will verify within 24 hours.'}
+                  {subState === 'restricted' && 'Your account has been restricted. Please contact support.'}
+                  {subState === 'inactive' && 'Subscribe below to get full access to SmartCut features.'}
                 </div>
               </div>
-            ) : (
-              <>
-                {subStatus?.subscription?.status === 'pending' && (
-                  <div style={{ padding: 14, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f59e0b', fontWeight: 600 }}>
-                      <Clock size={16} /> Payment Pending Review
-                    </div>
-                    <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 4 }}>Admin will approve your subscription shortly.</div>
-                  </div>
-                )}
+            </div>
 
+            {(subState === 'inactive') && (
+              <>
                 {adminQr && (
-                  <div style={{ padding: 16, background: '#0a1020', borderRadius: 10, marginBottom: 16, textAlign: 'center' }}>
+                  <div style={{ background: '#0a1020', borderRadius: 10, padding: 16, marginBottom: 14, textAlign: 'center' }}>
                     <div style={{ color: '#f0f0f0', fontWeight: 600, marginBottom: 4 }}>Pay via {adminQr.type}</div>
                     {adminQr.account_name && <div style={{ color: '#8b92a9', fontSize: 13, marginBottom: 10 }}>{adminQr.account_name}</div>}
-                    <img src={adminQr.qr_url} alt="Payment QR" style={{ maxWidth: 200, width: '100%', margin: '0 auto', display: 'block', borderRadius: 8, border: '1px solid #1e2a3a', background: '#fff', padding: 4 }} />
-                    <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 10 }}>Scan, pay, then upload your receipt below</div>
+                    <img src={adminQr.qr_url} alt="Payment QR" style={{ maxWidth: 180, width: '100%', margin: '0 auto', display: 'block', borderRadius: 8, border: '1px solid #1e2a3a', background: '#fff', padding: 4 }} />
+                    <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 10 }}>Scan and pay, then upload your receipt below</div>
                   </div>
                 )}
-
                 <form onSubmit={handleSubRequest}>
-                  <div style={{ marginBottom: 14 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#0a1020', border: '1px dashed #1e2a3a', borderRadius: 8, cursor: 'pointer', color: proofFile ? '#10b981' : '#8b92a9', fontSize: 13 }}>
-                      <Upload size={16} />
-                      {proofFile ? `✓ ${proofFile.name}` : 'Upload payment receipt / screenshot'}
-                      <input type="file" accept="image/*" onChange={e => setProofFile(e.target.files[0])} style={{ display: 'none' }} />
-                    </label>
-                  </div>
-                  <button type="submit" disabled={uploading || !proofFile || subStatus?.subscription?.status === 'pending'} style={{ width: '100%', padding: '12px', background: uploading || !proofFile || subStatus?.subscription?.status === 'pending' ? '#374151' : '#d4af37', color: uploading || !proofFile || subStatus?.subscription?.status === 'pending' ? '#8b92a9' : '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>
-                    {uploading ? 'Submitting...' : subStatus?.subscription?.status === 'pending' ? 'Request Already Submitted' : 'Submit Subscription Request'}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#0a1020', border: '1px dashed #1e2a3a', borderRadius: 8, cursor: 'pointer', color: proofFile ? '#10b981' : '#8b92a9', fontSize: 13, marginBottom: 10 }}>
+                    <Upload size={15} /> {proofFile ? `✓ ${proofFile.name}` : 'Upload payment receipt'}
+                    <input type="file" accept="image/*" onChange={e => setProofFile(e.target.files[0])} style={{ display: 'none' }} />
+                  </label>
+                  <button type="submit" disabled={uploading || !proofFile} style={{ width: '100%', padding: '12px', background: proofFile ? '#d4af37' : '#374151', color: proofFile ? '#0f1422' : '#6b7280', border: 'none', borderRadius: 8, fontWeight: 700, cursor: proofFile ? 'pointer' : 'not-allowed', fontSize: 15 }}>
+                    {uploading ? 'Submitting...' : 'Submit Subscription Request'}
                   </button>
                 </form>
               </>
@@ -204,45 +217,46 @@ export default function CustomerProfile() {
         )}
 
         {tab === 'reports' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
               <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Submit Feedback / Report</h2>
               <form onSubmit={handleReport}>
                 <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Type</label>
-                  <select value={reportForm.report_type} onChange={e => setReportForm(p => ({ ...p, report_type: e.target.value }))} style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>
-                    {['feedback', 'complaint', 'bug', 'other'].map(t => <option key={t} value={t} style={{ background: '#0a1020', textTransform: 'capitalize' }}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Type</label>
+                  <select value={reportForm.report_type} onChange={e => setReportForm(p => ({ ...p, report_type: e.target.value }))} style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}>
+                    {['feedback', 'complaint', 'bug', 'other'].map(t => <option key={t} value={t} style={{ background: '#1a2234' }}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                   </select>
                 </div>
                 <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Subject</label>
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Subject</label>
                   <input value={reportForm.subject} onChange={e => setReportForm(p => ({ ...p, subject: e.target.value }))} placeholder="Brief summary" required style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Message</label>
-                  <textarea value={reportForm.message} onChange={e => setReportForm(p => ({ ...p, message: e.target.value }))} rows={4} required placeholder="Describe your experience or issue in detail..." style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Message</label>
+                  <textarea value={reportForm.message} onChange={e => setReportForm(p => ({ ...p, message: e.target.value }))} rows={3} required placeholder="Describe your feedback or issue..." style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
                 </div>
-                <button type="submit" disabled={submittingReport} style={{ width: '100%', padding: '12px', background: submittingReport ? '#374151' : '#d4af37', color: submittingReport ? '#8b92a9' : '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <MessageSquare size={14} /> {submittingReport ? 'Submitting...' : 'Submit'}
+                <button type="submit" disabled={submittingReport} style={{ width: '100%', padding: '12px', background: '#d4af37', color: '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: submittingReport ? 'not-allowed' : 'pointer', fontSize: 15 }}>
+                  {submittingReport ? 'Submitting...' : 'Submit'}
                 </button>
               </form>
             </div>
-
             {reports.length > 0 && (
               <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
-                <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 14 }}>My Reports</h2>
+                <h3 style={{ color: '#f0f0f0', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>My Reports</h3>
                 {reports.map(r => (
-                  <div key={r.id} style={{ padding: '12px', background: '#0a1020', borderRadius: 8, marginBottom: 8 }}>
+                  <div key={r.id} style={{ padding: '12px 14px', background: '#0a1020', borderRadius: 8, marginBottom: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ color: '#f0f0f0', fontWeight: 600, fontSize: 13 }}>{r.subject}</span>
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: r.status === 'open' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', color: r.status === 'open' ? '#ef4444' : '#10b981' }}>{r.status}</span>
+                      <div style={{ color: '#f0f0f0', fontWeight: 600, fontSize: 13 }}>{r.subject}</div>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: r.status === 'open' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)', color: r.status === 'open' ? '#f59e0b' : '#10b981' }}>{r.status}</span>
                     </div>
-                    <div style={{ color: '#8b92a9', fontSize: 12 }}>{new Date(r.created_at).toLocaleDateString()}</div>
+                    <div style={{ color: '#8b92a9', fontSize: 12 }}>{r.message}</div>
                     {r.admin_response && (
-                      <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(212,175,55,0.05)', borderLeft: '2px solid #d4af37', fontSize: 12, color: '#8b92a9' }}>
-                        <strong style={{ color: '#d4af37' }}>Admin reply:</strong> {r.admin_response}
+                      <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(212,175,55,0.05)', border: '1px solid rgba(212,175,55,0.15)', borderRadius: 6 }}>
+                        <div style={{ color: '#d4af37', fontSize: 11, fontWeight: 600, marginBottom: 2 }}>Admin Response</div>
+                        <div style={{ color: '#8b92a9', fontSize: 12 }}>{r.admin_response}</div>
                       </div>
                     )}
+                    <div style={{ color: '#374151', fontSize: 11, marginTop: 6 }}>{new Date(r.created_at).toLocaleDateString()}</div>
                   </div>
                 ))}
               </div>

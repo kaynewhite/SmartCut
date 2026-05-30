@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// PUBLIC: get one barbershop with services + barbers (only available barbers for public)
+// PUBLIC: get one barbershop with services + barbers + restriction info
 router.get('/:id', async (req, res) => {
   try {
     const shopRes = await pool.query(`
@@ -85,6 +85,7 @@ router.get('/:id', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH: get own profile (includes restriction info for the shop owner)
 router.get('/me/profile', authenticateBarbershop, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM barbershops WHERE id = $1', [req.user.id]);
@@ -94,6 +95,7 @@ router.get('/me/profile', authenticateBarbershop, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH: update profile (basic info only)
 router.put('/me/profile', authenticateBarbershop, async (req, res) => {
   try {
     const { name, phone, address, city, description, opening_time, closing_time, latitude, longitude } = req.body;
@@ -108,6 +110,51 @@ router.put('/me/profile', authenticateBarbershop, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH: update loyalty settings
+router.put('/me/loyalty-settings', authenticateBarbershop, async (req, res) => {
+  try {
+    const { loyalty_points_per_appointment, loyalty_streak_bonus, loyalty_streak_every } = req.body;
+    const pts = Math.max(0, parseInt(loyalty_points_per_appointment) || 1);
+    const bonus = Math.max(0, parseInt(loyalty_streak_bonus) || 0);
+    const every = Math.max(1, parseInt(loyalty_streak_every) || 5);
+    const result = await pool.query(
+      `UPDATE barbershops SET loyalty_points_per_appointment=$1, loyalty_streak_bonus=$2, loyalty_streak_every=$3 WHERE id=$4 RETURNING *`,
+      [pts, bonus, every, req.user.id]
+    );
+    const shop = result.rows[0]; delete shop.password;
+    res.json(shop);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// AUTH: submit appeal (when restricted)
+router.post('/me/appeal', authenticateBarbershop, async (req, res) => {
+  try {
+    const shop = await pool.query('SELECT is_active, appeal_status FROM barbershops WHERE id=$1', [req.user.id]);
+    if (!shop.rows.length) return res.status(404).json({ message: 'Not found' });
+    if (shop.rows[0].is_active) return res.status(400).json({ message: 'Your shop is not restricted' });
+    if (shop.rows[0].appeal_status === 'pending') return res.status(400).json({ message: 'An appeal is already pending review' });
+
+    const { appeal_text } = req.body;
+    if (!appeal_text?.trim()) return res.status(400).json({ message: 'Please provide an appeal message' });
+
+    await pool.query(
+      `UPDATE barbershops SET appeal_text=$1, appeal_status='pending' WHERE id=$2`,
+      [appeal_text.trim(), req.user.id]
+    );
+
+    // Notify admin(s)
+    const admins = await pool.query('SELECT id FROM admins LIMIT 5');
+    for (const admin of admins.rows) {
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('admin',$1,'📋 Barbershop Appeal Submitted',$2,'restriction')`,
+        [admin.id, `A barbershop has submitted an appeal. Review it in the Admin → Barbershops → Appeals section.`]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// AUTH: upload logo
 router.post('/me/logo', authenticateBarbershop, upload.single('logo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -117,6 +164,7 @@ router.post('/me/logo', authenticateBarbershop, upload.single('logo'), async (re
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH: upload cover
 router.post('/me/cover', authenticateBarbershop, upload.single('cover'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });

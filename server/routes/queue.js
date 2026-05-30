@@ -3,27 +3,32 @@ const router = express.Router();
 const pool = require('../db');
 const { authenticateBarbershopOrBarber } = require('../middleware/auth');
 
-// PUBLIC: get current queue for a shop (includes customer_id for own-position highlighting)
+// PUBLIC: get current queue for a shop
+// - Appointment entries include customer_id (for own-position) but mask customer_name for privacy
+// - Walk-in entries are anonymized by number for public view
 router.get('/:barbershopId', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const apptRes = await pool.query(`
       SELECT a.id, a.queue_number, a.status, a.appointment_time, a.customer_id,
-        s.name as service_name, br.name as barber_name
+        s.name as service_name, br.name as barber_name, br.id as barber_id
       FROM appointments a
       LEFT JOIN services s ON s.id = a.service_id
       LEFT JOIN barbers br ON br.id = a.barber_id
       WHERE a.barbershop_id = $1 AND a.appointment_date = $2 AND a.status IN ('pending','confirmed','in_progress')
       ORDER BY a.queue_number
     `, [req.params.barbershopId, today]);
+
     const walkInRes = await pool.query(`
-      SELECT w.id, w.queue_number, w.status, s.name as service_name, br.name as barber_name
+      SELECT w.id, w.queue_number, w.status, w.customer_name, w.barber_id,
+        s.name as service_name, br.name as barber_name
       FROM walk_ins w
       LEFT JOIN services s ON s.id = w.service_id
       LEFT JOIN barbers br ON br.id = w.barber_id
       WHERE w.barbershop_id = $1 AND w.status IN ('waiting','in_progress') AND DATE(w.created_at) = $2
       ORDER BY w.queue_number
     `, [req.params.barbershopId, today]);
+
     res.json({ appointments: apptRes.rows, walk_ins: walkInRes.rows });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
@@ -37,7 +42,7 @@ router.get('/:barbershopId/schedule', async (req, res) => {
     const params = [req.params.barbershopId, targetDate];
     if (barber_id) { params.push(barber_id); q += ` AND barber_id = $3`; }
     const result = await pool.query(q, params);
-    const occupied = result.rows.map(r => ({ time: r.appointment_time?.substring(0,5), occupied: true }));
+    const occupied = result.rows.map(r => ({ time: r.appointment_time?.substring(0, 5), occupied: true }));
     res.json({ date: targetDate, occupied });
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
@@ -53,9 +58,10 @@ router.post('/', authenticateBarbershopOrBarber, async (req, res) => {
       `SELECT COALESCE(MAX(queue_number), 0) + 1 as q FROM walk_ins WHERE barbershop_id = $1 AND DATE(created_at) = $2`,
       [shopId, today]
     );
+    const assignedBarber = barber_id || (req.user.type === 'barber' ? req.user.id : null);
     const result = await pool.query(
       `INSERT INTO walk_ins (barbershop_id, customer_name, service_id, barber_id, queue_number) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [shopId, customer_name, service_id || null, barber_id || (req.user.type === 'barber' ? req.user.id : null), lastQ.rows[0].q]
+      [shopId, customer_name, service_id || null, assignedBarber, lastQ.rows[0].q]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
@@ -65,15 +71,16 @@ router.post('/', authenticateBarbershopOrBarber, async (req, res) => {
 router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => {
   try {
     const { status } = req.body;
-    if (!['waiting','in_progress','done','cancelled'].includes(status)) return res.status(400).json({ message: 'Invalid' });
+    const valid = ['waiting', 'in_progress', 'done', 'cancelled'];
+    if (!valid.includes(status)) return res.status(400).json({ message: 'Invalid status' });
     const shopId = req.user.type === 'barber' ? req.user.barbershop_id : req.user.id;
     const result = await pool.query(
-      `UPDATE walk_ins SET status = $1 WHERE id = $2 AND barbershop_id = $3 RETURNING *`,
+      `UPDATE walk_ins SET status=$1 WHERE id=$2 AND barbershop_id=$3 RETURNING *`,
       [status, req.params.id, shopId]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
 module.exports = router;

@@ -31,6 +31,7 @@ import BarberDashboard from './pages/barber/Dashboard';
 import BarberProfile from './pages/barber/Profile';
 import BarberReviews from './pages/barber/Reviews';
 import BarberServicesPage from './pages/barber/Services';
+import BarberHistory from './pages/barber/History';
 
 import AdminLogin from './pages/admin/Login';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -52,21 +53,18 @@ function ProtectedCustomer({ children }) {
   if (!user || user.type !== 'customer') return <Navigate to="/customer/login" replace />;
   return children;
 }
-
 function ProtectedBarbershop({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Loader />;
   if (!user || user.type !== 'barbershop') return <Navigate to="/barbershop/login" replace />;
   return children;
 }
-
 function ProtectedBarber({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Loader />;
   if (!user || user.type !== 'barber') return <Navigate to="/barber/login" replace />;
   return children;
 }
-
 function ProtectedAdmin({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Loader />;
@@ -83,7 +81,6 @@ function AppRoutes() {
     if (t === 'admin') return '/admin/dashboard';
     return '/';
   };
-
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
@@ -123,6 +120,7 @@ function AppRoutes() {
       <Route path="/barber/profile" element={<ProtectedBarber><BarberProfile /></ProtectedBarber>} />
       <Route path="/barber/reviews" element={<ProtectedBarber><BarberReviews /></ProtectedBarber>} />
       <Route path="/barber/services" element={<ProtectedBarber><BarberServicesPage /></ProtectedBarber>} />
+      <Route path="/barber/history" element={<ProtectedBarber><BarberHistory /></ProtectedBarber>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

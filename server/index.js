@@ -42,6 +42,11 @@ async function runMigrations() {
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS loyalty_points_per_appointment INTEGER DEFAULT 1`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS loyalty_streak_bonus INTEGER DEFAULT 0`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS loyalty_streak_every INTEGER DEFAULT 5`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS restriction_reason TEXT`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS restriction_requirements TEXT`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS appeal_text TEXT`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS appeal_status TEXT DEFAULT 'none'`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS restricted_at TIMESTAMP`,
   ];
   for (const sql of migrations) {
     try { await pool.query(sql); } catch (err) { console.error('Migration error:', err.message); }

@@ -14,17 +14,17 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 // ADMIN: dashboard stats
 router.get('/dashboard', authenticateAdmin, async (req, res) => {
   try {
-    const [shops, customers, appts, pendingSubs, openReports, todayAppts] = await Promise.all([
+    const [shops, customers, appts, pendingSubs, openReports, todayAppts, activeSubs, shopSubs, custSubs] = await Promise.all([
       pool.query('SELECT COUNT(*) as count FROM barbershops'),
       pool.query('SELECT COUNT(*) as count FROM customers'),
       pool.query('SELECT COUNT(*) as count FROM appointments'),
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'pending'"),
       pool.query("SELECT COUNT(*) as count FROM feedback_reports WHERE status = 'open'"),
       pool.query("SELECT COUNT(*) as count FROM appointments WHERE appointment_date = CURRENT_DATE"),
+      pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'active'"),
+      pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'barbershop' AND status = 'active'"),
+      pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'customer' AND status = 'active'"),
     ]);
-    const activeSubs = await pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'active'");
-    const shopSubs = await pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'barbershop' AND status = 'active'");
-    const custSubs = await pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'customer' AND status = 'active'");
     const recentShops = await pool.query(`
       SELECT b.id, b.name, b.email, b.city, b.created_at, b.subscription_status,
         (SELECT COUNT(*) FROM appointments WHERE barbershop_id = b.id) as total_appointments
@@ -51,7 +51,9 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
 router.get('/barbershops', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT b.id, b.name, b.email, b.phone, b.city, b.address, b.is_active, b.subscription_status, b.created_at,
+      SELECT b.id, b.name, b.email, b.phone, b.city, b.address, b.is_active,
+        b.subscription_status, b.created_at, b.restriction_reason, b.restriction_requirements,
+        b.appeal_text, b.appeal_status, b.restricted_at,
         (SELECT COUNT(*) FROM appointments WHERE barbershop_id = b.id) as total_appointments,
         (SELECT COUNT(*) FROM barbers WHERE barbershop_id = b.id) as total_barbers,
         s.id as sub_id, s.status as sub_status, s.payment_proof_url, s.created_at as sub_created_at, s.expires_at
@@ -82,7 +84,7 @@ router.get('/customers', authenticateAdmin, async (req, res) => {
 router.get('/subscriptions', authenticateAdmin, async (req, res) => {
   try {
     const { type, status } = req.query;
-    let query = `SELECT s.*, 
+    let query = `SELECT s.*,
       CASE WHEN s.subscriber_type = 'barbershop' THEN b.name ELSE c.name END as subscriber_name,
       CASE WHEN s.subscriber_type = 'barbershop' THEN b.email ELSE c.email END as subscriber_email
       FROM subscriptions s
@@ -92,6 +94,7 @@ router.get('/subscriptions', authenticateAdmin, async (req, res) => {
     const params = [];
     if (type) { params.push(type); query += ` AND s.subscriber_type = $${params.length}`; }
     if (status) { params.push(status); query += ` AND s.status = $${params.length}`; }
+    else { query += ` AND s.status = 'pending'`; }
     query += ' ORDER BY s.created_at DESC';
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -121,8 +124,8 @@ router.patch('/subscriptions/:id', authenticateAdmin, async (req, res) => {
       [s.subscriber_type, s.subscriber_id,
         action === 'approve' ? 'Subscription Approved!' : 'Subscription Rejected',
         action === 'approve'
-          ? 'Your subscription has been approved. You now have full access.'
-          : `Your subscription was rejected. ${admin_note || 'Please contact support.'}`
+          ? 'Your subscription has been approved. You now have full access to SmartCut.'
+          : `Your subscription was rejected. ${admin_note || 'Please contact support for more information.'}`
       ]
     );
     res.json({ ok: true });
@@ -168,7 +171,7 @@ router.patch('/reports/:id', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: upload QR code for subscription payment
+// ADMIN: upload QR code
 router.post('/qr', authenticateAdmin, upload.single('qr'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file' });
@@ -200,22 +203,17 @@ router.get('/me', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: update own profile (name + email)
 router.put('/me', authenticateAdmin, async (req, res) => {
   try {
     const { name, email } = req.body;
     if (!name || !email) return res.status(400).json({ message: 'Name and email required' });
     const conflict = await pool.query('SELECT id FROM admins WHERE email=$1 AND id!=$2', [email.toLowerCase(), req.user.id]);
     if (conflict.rows.length) return res.status(400).json({ message: 'Email already in use' });
-    const result = await pool.query(
-      'UPDATE admins SET name=$1, email=$2 WHERE id=$3 RETURNING id, name, email',
-      [name.trim(), email.toLowerCase(), req.user.id]
-    );
+    const result = await pool.query('UPDATE admins SET name=$1, email=$2 WHERE id=$3 RETURNING id, name, email', [name.trim(), email.toLowerCase(), req.user.id]);
     res.json(result.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: change own password
 router.put('/me/password', authenticateAdmin, async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
@@ -231,31 +229,109 @@ router.put('/me/password', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: toggle barbershop active status (restrict/unrestrict)
-router.patch('/barbershops/:id/toggle', authenticateAdmin, async (req, res) => {
-  try {
-    const result = await pool.query('UPDATE barbershops SET is_active = NOT is_active WHERE id = $1 RETURNING id, name, is_active', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
-    res.json(result.rows[0]);
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
-});
-
-// ADMIN: restrict/unrestrict barbershop (same as toggle — alias)
+// ADMIN: restrict barbershop — requires reason, prevents operation, barbershop must appeal
 router.patch('/barbershops/:id/restrict', authenticateAdmin, async (req, res) => {
   try {
-    const result = await pool.query('UPDATE barbershops SET is_active = NOT is_active WHERE id = $1 RETURNING id, name, is_active', [req.params.id]);
-    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
-    res.json(result.rows[0]);
+    const { reason, requirements } = req.body;
+    const current = await pool.query('SELECT id, name, is_active, email FROM barbershops WHERE id=$1', [req.params.id]);
+    if (!current.rows.length) return res.status(404).json({ message: 'Not found' });
+    const shop = current.rows[0];
+
+    if (shop.is_active) {
+      // Restricting: require a reason
+      if (!reason || !reason.trim()) return res.status(400).json({ message: 'A reason is required to restrict a barbershop' });
+      await pool.query(
+        `UPDATE barbershops SET is_active=false, restriction_reason=$1, restriction_requirements=$2, appeal_status='none', restricted_at=NOW() WHERE id=$3`,
+        [reason.trim(), requirements?.trim() || null, req.params.id]
+      );
+      // Notify owner
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barbershop',$1,$2,$3,'restriction')`,
+        [req.params.id,
+          '⚠️ Your Shop Has Been Restricted',
+          `Your barbershop has been restricted and is no longer visible to customers.\n\nReason: ${reason}${requirements ? `\n\nRequirements to lift restriction: ${requirements}` : ''}\n\nYou may submit an appeal from your Settings page.`
+        ]
+      );
+      // Notify all barbers
+      const barbers = await pool.query('SELECT id FROM barbers WHERE barbershop_id=$1', [req.params.id]);
+      for (const b of barbers.rows) {
+        await pool.query(
+          `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barber',$1,'Shop Restricted','Your barbershop has been restricted by the admin. Please contact your shop owner for details.','restriction')`,
+          [b.id]
+        );
+      }
+      res.json({ ok: true, is_active: false, name: shop.name });
+    } else {
+      // Unrestricting (lifting restriction)
+      await pool.query(
+        `UPDATE barbershops SET is_active=true, restriction_reason=NULL, restriction_requirements=NULL, appeal_status='none', restricted_at=NULL WHERE id=$1`,
+        [req.params.id]
+      );
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barbershop',$1,'✅ Restriction Lifted','Your barbershop restriction has been lifted. Your shop is now visible to customers again.','restriction')`,
+        [req.params.id]
+      );
+      res.json({ ok: true, is_active: true, name: shop.name });
+    }
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: delete barbershop
+// ADMIN: view appeals
+router.get('/barbershops/appeals', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, restriction_reason, restriction_requirements, appeal_text, appeal_status, restricted_at
+       FROM barbershops WHERE appeal_status = 'pending' ORDER BY restricted_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: resolve appeal (approve = lift restriction, reject = keep restricted)
+router.patch('/barbershops/:id/appeal', authenticateAdmin, async (req, res) => {
+  try {
+    const { action, admin_note } = req.body;
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ message: 'Invalid action' });
+
+    if (action === 'approve') {
+      await pool.query(
+        `UPDATE barbershops SET is_active=true, appeal_status='approved', restriction_reason=NULL, restriction_requirements=NULL, restricted_at=NULL WHERE id=$1`,
+        [req.params.id]
+      );
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barbershop',$1,'✅ Appeal Approved',$2,'restriction')`,
+        [req.params.id, `Your appeal has been approved and your shop restriction has been lifted. ${admin_note || 'Welcome back!'}`]
+      );
+    } else {
+      await pool.query(`UPDATE barbershops SET appeal_status='rejected' WHERE id=$1`, [req.params.id]);
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barbershop',$1,'❌ Appeal Rejected',$2,'restriction')`,
+        [req.params.id, `Your appeal has been rejected. ${admin_note || 'Your shop remains restricted. Please contact support.'}`]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: delete barbershop — cascade everything, notify owner and barbers first
 router.delete('/barbershops/:id', authenticateAdmin, async (req, res) => {
   try {
     const existing = await pool.query('SELECT id, name FROM barbershops WHERE id=$1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
+    const shop = existing.rows[0];
+
+    // Notify all barbers
+    const barbers = await pool.query('SELECT id FROM barbers WHERE barbershop_id=$1', [req.params.id]);
+    for (const b of barbers.rows) {
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barber',$1,'Shop Account Deleted',$2,'restriction')`,
+        [b.id, `The barbershop "${shop.name}" has been permanently deleted by an admin. Your barber account is no longer active.`]
+      );
+    }
+
+    // Delete the barbershop (ON DELETE CASCADE handles barbers, services, loyalty, appointments, etc.)
     await pool.query('DELETE FROM barbershops WHERE id=$1', [req.params.id]);
-    res.json({ ok: true, name: existing.rows[0].name });
+    res.json({ ok: true, name: shop.name });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
@@ -266,6 +342,17 @@ router.patch('/customers/:id/restrict', authenticateAdmin, async (req, res) => {
     if (!current.rows.length) return res.status(404).json({ message: 'Not found' });
     const newStatus = current.rows[0].subscription_status === 'restricted' ? 'inactive' : 'restricted';
     const result = await pool.query('UPDATE customers SET subscription_status=$1 WHERE id=$2 RETURNING id, name, subscription_status', [newStatus, req.params.id]);
+    if (newStatus === 'restricted') {
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('customer',$1,'⚠️ Account Restricted','Your customer account has been restricted by an admin. You cannot book appointments until this is resolved.','restriction')`,
+        [req.params.id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('customer',$1,'✅ Account Restriction Lifted','Your account restriction has been lifted. You can now book appointments again.','restriction')`,
+        [req.params.id]
+      );
+    }
     res.json(result.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
