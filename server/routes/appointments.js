@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const multer = require('multer');
 const path = require('path');
-const { authenticateCustomer, authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
+const { authenticateCustomer, authenticateBarbershop, authenticateBarbershopOrBarber, authenticateBarber } = require('../middleware/auth');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
@@ -11,73 +11,48 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
-const ACTIVE = ['pending', 'confirmed', 'in_progress'];
-
-// CUSTOMER: book appointment (no downpayment)
+// CUSTOMER: book appointment
 router.post('/', authenticateCustomer, async (req, res) => {
-  const { barbershop_id, barber_id, service_id, appointment_date, appointment_time, is_home_service, home_address, notes } = req.body;
-  if (!barbershop_id || !service_id || !appointment_date || !appointment_time) {
-    return res.status(400).json({ message: 'Missing required fields' });
-  }
   try {
+    const { barbershop_id, barber_id, service_id, appointment_date, appointment_time, is_home_service, home_address, notes } = req.body;
+    if (!barbershop_id || !service_id || !appointment_date || !appointment_time) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
     const banCheck = await pool.query(
-      `SELECT * FROM customer_bans WHERE customer_id=$1 AND barbershop_id=$2 AND (banned_until IS NULL OR banned_until > NOW())`,
+      `SELECT id FROM customer_bans WHERE customer_id=$1 AND barbershop_id=$2 AND (banned_until IS NULL OR banned_until > NOW())`,
       [req.user.id, barbershop_id]
     );
-    if (banCheck.rows.length) {
-      const b = banCheck.rows[0];
-      return res.status(403).json({ message: b.banned_until ? `Banned until ${new Date(b.banned_until).toLocaleDateString()}: ${b.reason}` : `Permanently banned: ${b.reason}` });
-    }
+    if (banCheck.rows.length) return res.status(403).json({ message: 'You are banned from this barbershop' });
 
-    const active = await pool.query(`SELECT id FROM appointments WHERE customer_id=$1 AND status = ANY($2)`, [req.user.id, ACTIVE]);
-    if (active.rows.length) return res.status(400).json({ message: 'You already have an active appointment. Complete or cancel it first.' });
-
-    if (barber_id) {
-      const barberCheck = await pool.query('SELECT is_available FROM barbers WHERE id=$1', [barber_id]);
-      if (barberCheck.rows.length && !barberCheck.rows[0].is_available) {
-        return res.status(400).json({ message: 'Selected barber is not currently available.' });
-      }
-    }
-
-    const slotCheck = await pool.query(
-      `SELECT id FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND appointment_time=$3 AND status NOT IN ('cancelled','no_show') ${barber_id ? 'AND barber_id=$4' : ''}`,
-      barber_id ? [barbershop_id, appointment_date, appointment_time, barber_id] : [barbershop_id, appointment_date, appointment_time]
+    const activeCheck = await pool.query(
+      `SELECT id FROM appointments WHERE customer_id=$1 AND barbershop_id=$2 AND status IN ('pending','confirmed','in_progress')`,
+      [req.user.id, barbershop_id]
     );
-    if (slotCheck.rows.length) return res.status(400).json({ message: 'That time slot was just taken. Please pick another.' });
+    if (activeCheck.rows.length) return res.status(400).json({ message: 'You already have an active appointment at this shop' });
 
-    const svc = await pool.query('SELECT price FROM services WHERE id=$1', [service_id]);
-    if (!svc.rows.length) return res.status(404).json({ message: 'Service not found' });
+    const serviceRes = await pool.query('SELECT price FROM services WHERE id=$1', [service_id]);
+    if (!serviceRes.rows.length) return res.status(404).json({ message: 'Service not found' });
+    const total_amount = serviceRes.rows[0].price;
 
-    const lastQ = await pool.query(
-      'SELECT COALESCE(MAX(queue_number),0)+1 as q FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2',
+    const queueRes = await pool.query(
+      `SELECT COALESCE(MAX(queue_number),0)+1 as q FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2`,
       [barbershop_id, appointment_date]
     );
 
     const result = await pool.query(
-      `INSERT INTO appointments (customer_id, barbershop_id, barber_id, service_id, appointment_date, appointment_time, is_home_service, home_address, notes, total_amount, queue_number)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO appointments (customer_id, barbershop_id, barber_id, service_id, appointment_date, appointment_time, is_home_service, home_address, notes, total_amount, queue_number, status, payment_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending','unpaid') RETURNING *`,
       [req.user.id, barbershop_id, barber_id || null, service_id, appointment_date, appointment_time,
-       !!is_home_service, home_address || null, notes || null, svc.rows[0].price, lastQ.rows[0].q]
+       is_home_service || false, home_address || null, notes || null, total_amount, queueRes.rows[0].q]
     );
-    await pool.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('barbershop',$1,'New Appointment',$2,'new_appointment',$3)`,
-      [barbershop_id, `New booking on ${appointment_date} at ${appointment_time}`, result.rows[0].id]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
-});
+    const appt = result.rows[0];
 
-// AVAILABLE SLOTS
-router.get('/available-slots', async (req, res) => {
-  try {
-    const { barbershop_id, barber_id, date } = req.query;
-    if (!barbershop_id || !date) return res.json({ booked_slots: [] });
-    let query = `SELECT appointment_time FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND status NOT IN ('cancelled','no_show')`;
-    const params = [barbershop_id, date];
-    if (barber_id) { params.push(barber_id); query += ` AND barber_id=$${params.length}`; }
-    const result = await pool.query(query, params);
-    res.json({ booked_slots: result.rows.map(r => r.appointment_time?.substring(0, 5)) });
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+    await pool.query(
+      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('barbershop',$1,'New Appointment Booked',$2,'new_booking',$3)`,
+      [barbershop_id, `New appointment booked for ${appointment_date} at ${appointment_time}`, appt.id]
+    );
+    res.status(201).json(appt);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
 // CUSTOMER: my active appointments
@@ -98,13 +73,13 @@ router.get('/my', authenticateCustomer, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// CUSTOMER: history (completed)
+// CUSTOMER: history (all completed/cancelled/no_show)
 router.get('/history', authenticateCustomer, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT a.*, b.name as barbershop_name, b.address as barbershop_address, b.logo_url as barbershop_logo, b.city as barbershop_city,
         s.name as service_name, s.price as service_price, s.duration_minutes, s.category as service_category,
-        s.image_url as service_image,
+        s.image_url as service_image, s.is_home_service as service_is_home,
         br.name as barber_name, br.photo_url as barber_photo,
         r.barbershop_rating, r.barber_rating, r.comment as review_comment,
         bcr.rating as customer_rating_received, bcr.comment as customer_rating_comment,
@@ -116,14 +91,14 @@ router.get('/history', authenticateCustomer, async (req, res) => {
       LEFT JOIN ratings r ON r.appointment_id=a.id AND r.customer_id=a.customer_id
       LEFT JOIN barber_customer_ratings bcr ON bcr.appointment_id=a.id
       LEFT JOIN loyalty_transactions lt ON lt.customer_id=a.customer_id AND lt.barbershop_id=a.barbershop_id AND lt.type='earned' AND lt.description LIKE '%'||a.id||'%'
-      WHERE a.customer_id=$1 AND a.status='completed'
+      WHERE a.customer_id=$1 AND a.status IN ('completed','cancelled','no_show')
       ORDER BY a.appointment_date DESC, a.appointment_time DESC
     `, [req.user.id]);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// SHOP/BARBER: list appointments
+// SHOP/BARBER: list appointments (today + active)
 router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
   try {
     const { date, status } = req.query;
@@ -143,6 +118,33 @@ router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
     if (isBarber) { params.push(req.user.id); query += ` AND a.barber_id=$${params.length}`; }
     if (date) { params.push(date); query += ` AND a.appointment_date=$${params.length}`; }
     if (status) { params.push(status); query += ` AND a.status=$${params.length}`; }
+    query += ' ORDER BY a.appointment_date DESC, a.appointment_time DESC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// SHOP/BARBER: history (completed + cancelled + no_show)
+router.get('/shop/history', authenticateBarbershopOrBarber, async (req, res) => {
+  try {
+    const { status, from_date, to_date } = req.query;
+    const isBarber = req.user.type === 'barber';
+    const shopId = isBarber ? req.user.barbershop_id : req.user.id;
+    let query = `
+      SELECT a.*, c.name as customer_name, c.phone as customer_phone, c.avatar_url as customer_avatar, c.rating as customer_rating,
+        s.name as service_name, s.price as service_price, s.duration_minutes, s.category as service_category,
+        br.name as barber_name
+      FROM appointments a
+      LEFT JOIN customers c ON c.id=a.customer_id
+      LEFT JOIN services s ON s.id=a.service_id
+      LEFT JOIN barbers br ON br.id=a.barber_id
+      WHERE a.barbershop_id=$1 AND a.status IN ('completed','cancelled','no_show')
+    `;
+    const params = [shopId];
+    if (isBarber) { params.push(req.user.id); query += ` AND a.barber_id=$${params.length}`; }
+    if (status) { params.push(status); query += ` AND a.status=$${params.length}`; }
+    if (from_date) { params.push(from_date); query += ` AND a.appointment_date >= $${params.length}`; }
+    if (to_date) { params.push(to_date); query += ` AND a.appointment_date <= $${params.length}`; }
     query += ' ORDER BY a.appointment_date DESC, a.appointment_time DESC';
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -244,18 +246,23 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
     const appt = result.rows[0];
 
     if (status === 'completed' && appt.customer_id) {
+      const shopSettings = await pool.query(
+        'SELECT COALESCE(loyalty_points_per_appointment, 1) as pts FROM barbershops WHERE id=$1',
+        [appt.barbershop_id]
+      ).catch(() => ({ rows: [{ pts: 1 }] }));
+      const pts = parseInt(shopSettings.rows[0]?.pts || 1);
       await pool.query(
-        `INSERT INTO customer_shop_loyalty (customer_id, barbershop_id, points, updated_at) VALUES ($1,$2,1,NOW())
-         ON CONFLICT (customer_id, barbershop_id) DO UPDATE SET points=customer_shop_loyalty.points+1, updated_at=NOW()`,
-        [appt.customer_id, appt.barbershop_id]
+        `INSERT INTO customer_shop_loyalty (customer_id, barbershop_id, points, updated_at) VALUES ($1,$2,$3,NOW())
+         ON CONFLICT (customer_id, barbershop_id) DO UPDATE SET points=customer_shop_loyalty.points+$3, updated_at=NOW()`,
+        [appt.customer_id, appt.barbershop_id, pts]
       );
       await pool.query(
-        `INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,1,'earned',$3)`,
-        [appt.customer_id, appt.barbershop_id, `Completed appointment #${req.params.id}`]
+        `INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,$3,'earned',$4)`,
+        [appt.customer_id, appt.barbershop_id, pts, `Completed appointment #${req.params.id}`]
       );
       await pool.query(
-        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('customer',$1,'+1 Loyalty Point','You earned 1 loyalty point! Visit the shop page to see & redeem promos.','loyalty',$2)`,
-        [appt.customer_id, req.params.id]
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('customer',$1,$2,$3,'loyalty',$4)`,
+        [appt.customer_id, `+${pts} Loyalty Point${pts !== 1 ? 's' : ''}`, `You earned ${pts} loyalty point${pts !== 1 ? 's' : ''}! Visit the shop page to see & redeem promos.`, req.params.id]
       );
     }
     if (status === 'no_show' && appt.customer_id) {

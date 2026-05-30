@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
@@ -13,6 +13,9 @@ export default function Layout({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [flash, setFlash] = useState(null);
+  const prevUnreadRef = useRef(0);
+  const prevIdsRef = useRef(new Set());
 
   const isShop = user?.type === 'barbershop';
   const isBarber = user?.type === 'barber';
@@ -54,8 +57,21 @@ export default function Layout({ children }) {
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications');
-      setNotifications(res.data);
-      setUnread(res.data.filter(n => !n.is_read).length);
+      const notifs = res.data || [];
+      const newUnread = notifs.filter(n => !n.is_read).length;
+      const newIds = new Set(notifs.filter(n => !n.is_read).map(n => n.id));
+
+      const freshNotifs = notifs.filter(n => !n.is_read && !prevIdsRef.current.has(n.id));
+      if (freshNotifs.length > 0 && prevIdsRef.current.size > 0) {
+        const latest = freshNotifs[0];
+        setFlash(latest);
+        setTimeout(() => setFlash(null), 5000);
+      }
+
+      prevIdsRef.current = newIds;
+      prevUnreadRef.current = newUnread;
+      setNotifications(notifs);
+      setUnread(newUnread);
     } catch {}
   };
 
@@ -80,8 +96,40 @@ export default function Layout({ children }) {
     navigate('/');
   };
 
+  const NOTIF_COLORS = {
+    loyalty: '#d4af37',
+    new_booking: '#3b82f6',
+    payment_proof: '#8b5cf6',
+    payment_verified: '#10b981',
+    subscription: '#10b981',
+    no_show: '#ef4444',
+    report_response: '#f59e0b',
+  };
+
   return (
     <div className={styles.layout}>
+      {/* Flash banner for new notifications */}
+      {flash && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000,
+          background: NOTIF_COLORS[flash.type] || '#d4af37',
+          color: '#fff', padding: '12px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          boxShadow: '0 2px 16px rgba(0,0,0,0.4)', animation: 'slideDown .3s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Bell size={18} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{flash.title}</div>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>{flash.message}</div>
+            </div>
+          </div>
+          <button onClick={() => setFlash(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside className={`${styles.sidebar} ${sidebarOpen ? styles.open : ''}`}>
         <div className={styles.sidebarHeader}>
@@ -174,6 +222,13 @@ export default function Layout({ children }) {
           {children}
         </main>
       </div>
+
+      <style>{`
+        @keyframes slideDown {
+          from { transform: translateY(-100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

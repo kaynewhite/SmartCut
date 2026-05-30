@@ -37,6 +37,17 @@ app.use('/api/barber-ratings', require('./routes/barberRatings'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
+async function runMigrations() {
+  const migrations = [
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS loyalty_points_per_appointment INTEGER DEFAULT 1`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS loyalty_streak_bonus INTEGER DEFAULT 0`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS loyalty_streak_every INTEGER DEFAULT 5`,
+  ];
+  for (const sql of migrations) {
+    try { await pool.query(sql); } catch (err) { console.error('Migration error:', err.message); }
+  }
+}
+
 async function seedAdmin() {
   try {
     const email = (process.env.ADMIN_EMAIL || 'admin@smartcut.com').toLowerCase();
@@ -51,6 +62,7 @@ async function seedAdmin() {
 }
 
 pool.query('SELECT NOW()').then(async () => {
+  await runMigrations();
   await seedAdmin();
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`SmartCut API running on port ${PORT}`);

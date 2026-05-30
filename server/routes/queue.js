@@ -3,12 +3,12 @@ const router = express.Router();
 const pool = require('../db');
 const { authenticateBarbershopOrBarber } = require('../middleware/auth');
 
-// PUBLIC: get current queue for a shop (anonymized for customers)
+// PUBLIC: get current queue for a shop (includes customer_id for own-position highlighting)
 router.get('/:barbershopId', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const apptRes = await pool.query(`
-      SELECT a.id, a.queue_number, a.status, a.appointment_time,
+      SELECT a.id, a.queue_number, a.status, a.appointment_time, a.customer_id,
         s.name as service_name, br.name as barber_name
       FROM appointments a
       LEFT JOIN services s ON s.id = a.service_id

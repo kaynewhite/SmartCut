@@ -35,6 +35,7 @@ import BarberServicesPage from './pages/barber/Services';
 import AdminLogin from './pages/admin/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminBarbershops from './pages/admin/Barbershops';
+import AdminCustomers from './pages/admin/Customers';
 import AdminReports from './pages/admin/Reports';
 import AdminSettings from './pages/admin/Settings';
 import AdminProfile from './pages/admin/Profile';
@@ -90,6 +91,7 @@ function AppRoutes() {
       <Route path="/admin-login" element={user?.type === 'admin' ? <Navigate to="/admin/dashboard" /> : <AdminLogin />} />
       <Route path="/admin/dashboard" element={<ProtectedAdmin><AdminDashboard /></ProtectedAdmin>} />
       <Route path="/admin/barbershops" element={<ProtectedAdmin><AdminBarbershops /></ProtectedAdmin>} />
+      <Route path="/admin/customers" element={<ProtectedAdmin><AdminCustomers /></ProtectedAdmin>} />
       <Route path="/admin/reports" element={<ProtectedAdmin><AdminReports /></ProtectedAdmin>} />
       <Route path="/admin/settings" element={<ProtectedAdmin><AdminSettings /></ProtectedAdmin>} />
       <Route path="/admin/profile" element={<ProtectedAdmin><AdminProfile /></ProtectedAdmin>} />

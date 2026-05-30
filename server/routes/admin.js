@@ -63,6 +63,21 @@ router.get('/barbershops', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
+// ADMIN: list all customers
+router.get('/customers', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT c.id, c.name, c.email, c.phone, c.subscription_status, c.no_show_count, c.rating, c.created_at,
+        (SELECT COUNT(*) FROM appointments WHERE customer_id = c.id) as total_appointments,
+        s.id as sub_id, s.status as sub_status, s.payment_proof_url, s.created_at as sub_created_at
+      FROM customers c
+      LEFT JOIN subscriptions s ON s.subscriber_type = 'customer' AND s.subscriber_id = c.id AND s.status = 'pending'
+      ORDER BY c.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
 // ADMIN: list pending subscriptions
 router.get('/subscriptions', authenticateAdmin, async (req, res) => {
   try {
@@ -182,7 +197,7 @@ router.get('/me', authenticateAdmin, async (req, res) => {
     const result = await pool.query('SELECT id, name, email, created_at FROM admins WHERE id=$1', [req.user.id]);
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
 // ADMIN: update own profile (name + email)
@@ -197,7 +212,7 @@ router.put('/me', authenticateAdmin, async (req, res) => {
       [name.trim(), email.toLowerCase(), req.user.id]
     );
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
 // ADMIN: change own password
@@ -213,16 +228,56 @@ router.put('/me/password', authenticateAdmin, async (req, res) => {
     const hash = await bcrypt.hash(new_password, 10);
     await pool.query('UPDATE admins SET password=$1 WHERE id=$2', [hash, req.user.id]);
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: toggle barbershop active status
+// ADMIN: toggle barbershop active status (restrict/unrestrict)
 router.patch('/barbershops/:id/toggle', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query('UPDATE barbershops SET is_active = NOT is_active WHERE id = $1 RETURNING id, name, is_active', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: restrict/unrestrict barbershop (same as toggle — alias)
+router.patch('/barbershops/:id/restrict', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('UPDATE barbershops SET is_active = NOT is_active WHERE id = $1 RETURNING id, name, is_active', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: delete barbershop
+router.delete('/barbershops/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const existing = await pool.query('SELECT id, name FROM barbershops WHERE id=$1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
+    await pool.query('DELETE FROM barbershops WHERE id=$1', [req.params.id]);
+    res.json({ ok: true, name: existing.rows[0].name });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: restrict/unrestrict customer
+router.patch('/customers/:id/restrict', authenticateAdmin, async (req, res) => {
+  try {
+    const current = await pool.query('SELECT id, name, subscription_status FROM customers WHERE id=$1', [req.params.id]);
+    if (!current.rows.length) return res.status(404).json({ message: 'Not found' });
+    const newStatus = current.rows[0].subscription_status === 'restricted' ? 'inactive' : 'restricted';
+    const result = await pool.query('UPDATE customers SET subscription_status=$1 WHERE id=$2 RETURNING id, name, subscription_status', [newStatus, req.params.id]);
+    res.json(result.rows[0]);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: delete customer
+router.delete('/customers/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const existing = await pool.query('SELECT id, name FROM customers WHERE id=$1', [req.params.id]);
+    if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
+    await pool.query('DELETE FROM customers WHERE id=$1', [req.params.id]);
+    res.json({ ok: true, name: existing.rows[0].name });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
 module.exports = router;

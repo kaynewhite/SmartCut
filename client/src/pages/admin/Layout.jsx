@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Store, FileText, Settings, LogOut, Menu, X, Shield, UserCog } from 'lucide-react';
+import { LayoutDashboard, Store, FileText, Settings, LogOut, Menu, X, Shield, UserCog, Users } from 'lucide-react';
 
 const NAV = [
   { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/admin/barbershops', icon: Store, label: 'Barbershops' },
+  { to: '/admin/customers', icon: Users, label: 'Customers' },
   { to: '/admin/reports', icon: FileText, label: 'Reports' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];

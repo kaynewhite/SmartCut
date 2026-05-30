@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Plus, CheckCircle, PlayCircle, RefreshCw } from 'lucide-react';
+import { Plus, CheckCircle, PlayCircle, RefreshCw, X } from 'lucide-react';
 import styles from './Queue.module.css';
 
 export default function BarbershopQueue() {
@@ -22,7 +22,7 @@ export default function BarbershopQueue() {
       const [qRes, sRes, bRes] = await Promise.all([
         api.get(`/queue/${id}`),
         api.get('/services/me'),
-        api.get('/barbers')
+        api.get('/barbers', { params: { barbershop_id: id } })
       ]);
       setQueue(qRes.data);
       setServices(sRes.data);
@@ -33,8 +33,22 @@ export default function BarbershopQueue() {
 
   useEffect(() => { fetchData(); }, []);
 
+  const openAddModal = () => {
+    setForm({ customer_name: '', service_id: '', barber_id: '' });
+    setAddModal(true);
+  };
+
+  const handleBarberChange = (barber_id) => {
+    setForm(p => ({ ...p, barber_id, service_id: '' }));
+  };
+
+  const filteredServices = form.barber_id
+    ? services.filter(s => !s.created_by_barber_id || String(s.created_by_barber_id) === String(form.barber_id))
+    : services;
+
   const addWalkIn = async (e) => {
     e.preventDefault();
+    if (!form.customer_name.trim()) return toast.error('Customer name required');
     try {
       await api.post('/queue', form);
       toast.success('Walk-in added to queue!');
@@ -52,7 +66,7 @@ export default function BarbershopQueue() {
     } catch { toast.error('Failed'); }
   };
 
-  const totalWaiting = queue.walk_ins.filter(w => w.status === 'waiting').length + queue.appointments.filter(a => ['confirmed','pending'].includes(a.status)).length;
+  const totalWaiting = queue.walk_ins.filter(w => w.status === 'waiting').length + queue.appointments.filter(a => ['confirmed', 'pending'].includes(a.status)).length;
 
   return (
     <Layout>
@@ -61,7 +75,7 @@ export default function BarbershopQueue() {
           <h1>Queue Management</h1>
           <div className={styles.headerBtns}>
             <button className={styles.refreshBtn} onClick={fetchData}><RefreshCw size={16} /></button>
-            <button className={styles.addBtn} onClick={() => setAddModal(true)}><Plus size={16} /> Add Walk-in</button>
+            <button className={styles.addBtn} onClick={openAddModal}><Plus size={16} /> Add Walk-in</button>
           </div>
         </div>
 
@@ -79,7 +93,7 @@ export default function BarbershopQueue() {
                   <div className={styles.qNum}>#{a.queue_number}</div>
                   <div className={styles.itemInfo}>
                     <div className={styles.itemName}>{a.customer_name}</div>
-                    <div className={styles.itemMeta}>{a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''} · {a.appointment_time?.substring(0,5)}</div>
+                    <div className={styles.itemMeta}>{a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''} · {a.appointment_time?.substring(0, 5)}</div>
                   </div>
                   <span className={`badge ${a.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>{a.status === 'in_progress' ? 'In Progress' : 'Waiting'}</span>
                 </div>
@@ -109,23 +123,37 @@ export default function BarbershopQueue() {
         </div>
 
         {addModal && (
-          <div className={styles.modalBg}>
-            <div className={styles.modal}>
-              <h3>Add Walk-in Customer</h3>
+          <div className={styles.modalBg} onClick={() => setAddModal(false)}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ margin: 0 }}>Add Walk-in Customer</h3>
+                <button onClick={() => setAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8b92a9', padding: 4 }}><X size={18} /></button>
+              </div>
               <form onSubmit={addWalkIn} className={styles.form}>
-                <div className={styles.field}><label>Customer Name</label><input className={styles.input} value={form.customer_name} onChange={e => setForm(p => ({...p, customer_name: e.target.value}))} placeholder="Walk-in customer name" /></div>
-                <div className={styles.field}><label>Service</label>
-                  <select className={styles.input} value={form.service_id} onChange={e => setForm(p => ({...p, service_id: e.target.value}))}>
-                    <option value="">Select service</option>
-                    {services.map(s => <option key={s.id} value={s.id}>{s.name} - ₱{parseFloat(s.price).toFixed(0)}</option>)}
-                  </select>
+                <div className={styles.field}>
+                  <label>Customer Name *</label>
+                  <input className={styles.input} value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Walk-in customer name" required />
                 </div>
-                <div className={styles.field}><label>Barber</label>
-                  <select className={styles.input} value={form.barber_id} onChange={e => setForm(p => ({...p, barber_id: e.target.value}))}>
-                    <option value="">Any available</option>
+
+                <div className={styles.field}>
+                  <label>Barber <span style={{ color: '#6b7280', fontWeight: 400 }}>(select first to filter services)</span></label>
+                  <select className={styles.input} value={form.barber_id} onChange={e => handleBarberChange(e.target.value)}>
+                    <option value="">Any available barber</option>
                     {barbers.filter(b => b.is_available).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
+
+                <div className={styles.field}>
+                  <label>Service {form.barber_id && <span style={{ color: '#d4af37', fontSize: 11 }}>(filtered for selected barber)</span>}</label>
+                  <select className={styles.input} value={form.service_id} onChange={e => setForm(p => ({ ...p, service_id: e.target.value }))}>
+                    <option value="">Select service</option>
+                    {filteredServices.map(s => <option key={s.id} value={s.id}>{s.name} — ₱{parseFloat(s.price || 0).toFixed(0)}</option>)}
+                  </select>
+                  {form.barber_id && filteredServices.length === 0 && (
+                    <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>No services found for this barber. Try selecting "Any barber".</div>
+                  )}
+                </div>
+
                 <div className={styles.modalActions}>
                   <button className={styles.saveBtn} type="submit">Add to Queue</button>
                   <button className={styles.cancelBtn} type="button" onClick={() => setAddModal(false)}>Cancel</button>
