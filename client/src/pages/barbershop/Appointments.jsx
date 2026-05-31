@@ -11,6 +11,7 @@ const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In
 
 export default function BarbershopAppointments() {
   const [appointments, setAppointments] = useState([]);
+  const [walkIns, setWalkIns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
   const [statusFilter, setStatusFilter] = useState('');
@@ -26,7 +27,8 @@ export default function BarbershopAppointments() {
       if (dateFilter) params.date = dateFilter;
       if (statusFilter) params.status = statusFilter;
       const res = await api.get('/appointments/shop', { params });
-      setAppointments(res.data);
+      setAppointments(res.data.appointments || []);
+      setWalkIns(res.data.walk_ins || []);
     } catch {}
     setLoading(false);
   };
@@ -75,11 +77,13 @@ export default function BarbershopAppointments() {
         duration_unit: banForm.duration_unit,
         duration_value: banForm.duration_value
       });
-      toast.success(`Customer banned`);
+      toast.success('Customer banned');
       setBanModal(null);
       setBanForm({ reason: '', duration_unit: 'days', duration_value: 7 });
     } catch { toast.error('Failed to ban'); }
   };
+
+  const isEmpty = appointments.length === 0 && walkIns.length === 0;
 
   return (
     <Layout>
@@ -95,66 +99,101 @@ export default function BarbershopAppointments() {
           <button className={styles.clearBtn} onClick={() => { setDateFilter(''); setStatusFilter(''); }}>Clear Filters</button>
         </div>
 
-        {loading ? <div className={styles.loading}>Loading...</div> :
-          appointments.length === 0 ? <div className={styles.empty}><p>No appointments found.</p></div> :
-          <div className={styles.list}>
-            {appointments.map(a => (
-              <div key={a.id} className={styles.card}>
-                <div className={styles.cardTop}>
-                  <div className={styles.queueNum}>#{a.queue_number}</div>
-                  <div className={styles.customerInfo}>
-                    <div className={styles.customerName}>
-                      {a.customer_name}
-                      {a.customer_no_show_count > 0 && (
-                        <span style={{marginLeft:8,fontSize:11,color:'#ef4444',fontWeight:600}}>
-                          <AlertTriangle size={11} style={{verticalAlign:'middle'}}/> {a.customer_no_show_count} no-shows
-                        </span>
+        {loading && <div className={styles.loading}>Loading...</div>}
+
+        {!loading && isEmpty && (
+          <div className={styles.empty}><p>No appointments found.</p></div>
+        )}
+
+        {!loading && !isEmpty && (
+          <div>
+            {appointments.length > 0 && (
+              <div className={styles.list}>
+                {appointments.map(a => (
+                  <div key={a.id} className={styles.card}>
+                    <div className={styles.cardTop}>
+                      <div className={styles.queueNum}>#{a.queue_number}</div>
+                      <div className={styles.customerInfo}>
+                        <div className={styles.customerName}>
+                          {a.customer_name}
+                          {a.customer_no_show_count > 0 && (
+                            <span style={{marginLeft:8,fontSize:11,color:'#ef4444',fontWeight:600}}>
+                              <AlertTriangle size={11} style={{verticalAlign:'middle'}}/> {a.customer_no_show_count} no-shows
+                            </span>
+                          )}
+                          <span style={{marginLeft:8,fontSize:11,color:'#d4af37'}}>★ {parseFloat(a.customer_rating || 5).toFixed(1)}</span>
+                        </div>
+                        {a.customer_phone && <div className={styles.customerPhone}>{a.customer_phone}</div>}
+                      </div>
+                      <span className={`badge badge-${STATUS_COLOR[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+                    </div>
+                    <div className={styles.details}>
+                      <span><Clock size={13} /> {a.appointment_time?.substring(0,5)}</span>
+                      <span>{a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''}</span>
+                      {a.is_home_service && <span className="badge badge-info">Home Service</span>}
+                    </div>
+                    {a.notes && <div className={styles.notes}>Note: {a.notes}</div>}
+                    <div className={styles.payInfo}>
+                      <span className={`badge badge-${a.payment_status === 'paid' ? 'success' : a.payment_status === 'pending_verification' ? 'warning' : 'error'}`}>
+                        Payment: {a.payment_status === 'paid' ? 'Paid' : a.payment_status === 'pending_verification' ? 'Verify' : 'Unpaid'}
+                      </span>
+                      {a.amount_paid > 0 && <span style={{fontSize:12,color:'#8b92a9'}}>₱{parseFloat(a.amount_paid).toFixed(2)} paid</span>}
+                      {a.payment_proof_url && <a href={a.payment_proof_url} target="_blank" rel="noreferrer" className={styles.viewProof}>View Proof</a>}
+                      {a.payment_status === 'pending_verification' && (
+                        <div className={styles.payActions}>
+                          <button className={styles.approveBtn} onClick={() => verifyPayment(a.id, true)}><CheckCircle size={14} /> Approve</button>
+                          <button className={styles.rejectBtn} onClick={() => verifyPayment(a.id, false)}><XCircle size={14} /> Reject</button>
+                        </div>
                       )}
-                      <span style={{marginLeft:8,fontSize:11,color:'#d4af37'}}>★ {parseFloat(a.customer_rating || 5).toFixed(1)}</span>
                     </div>
-                    {a.customer_phone && <div className={styles.customerPhone}>{a.customer_phone}</div>}
+                    <div className={styles.actions} style={{flexWrap:'wrap',gap:8}}>
+                      <select className={styles.statusSelect} value={a.status} onChange={e => updateStatus(a.id, e.target.value)}>
+                        {STATUS_OPTS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                      </select>
+                      {['pending','confirmed','in_progress'].includes(a.status) && (
+                        <button onClick={() => updateStatus(a.id, 'no_show')} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'#7c2d12',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                          <UserX size={13}/> No-Show
+                        </button>
+                      )}
+                      <button onClick={() => setRateModal(a)} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                        <Star size={13}/> Rate Customer
+                      </button>
+                      <button onClick={() => setBanModal(a)} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'#991b1b',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                        <Ban size={13}/> Ban
+                      </button>
+                    </div>
                   </div>
-                  <span className={`badge badge-${STATUS_COLOR[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-                </div>
-                <div className={styles.details}>
-                  <span><Clock size={13} /> {a.appointment_time?.substring(0,5)}</span>
-                  <span>{a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''}</span>
-                  {a.is_home_service && <span className="badge badge-info">Home Service</span>}
-                </div>
-                {a.notes && <div className={styles.notes}>Note: {a.notes}</div>}
-                <div className={styles.payInfo}>
-                  <span className={`badge badge-${a.payment_status === 'paid' ? 'success' : a.payment_status === 'pending_verification' ? 'warning' : 'error'}`}>
-                    Payment: {a.payment_status === 'paid' ? 'Paid' : a.payment_status === 'pending_verification' ? 'Verify' : 'Unpaid'}
-                  </span>
-                  {a.amount_paid > 0 && <span style={{fontSize:12,color:'#8b92a9'}}>₱{parseFloat(a.amount_paid).toFixed(2)} paid</span>}
-                  {a.payment_proof_url && <a href={a.payment_proof_url} target="_blank" rel="noreferrer" className={styles.viewProof}>View Proof</a>}
-                  {a.payment_status === 'pending_verification' && (
-                    <div className={styles.payActions}>
-                      <button className={styles.approveBtn} onClick={() => verifyPayment(a.id, true)}><CheckCircle size={14} /> Approve</button>
-                      <button className={styles.rejectBtn} onClick={() => verifyPayment(a.id, false)}><XCircle size={14} /> Reject</button>
+                ))}
+              </div>
+            )}
+
+            {walkIns.length > 0 && (
+              <div style={{marginTop: appointments.length > 0 ? 28 : 0}}>
+                <h3 style={{color:'#f59e0b',fontSize:14,fontWeight:700,marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                  Walk-ins Today ({walkIns.length})
+                </h3>
+                <div className={styles.list}>
+                  {walkIns.map(w => (
+                    <div key={`wi-${w.id}`} className={styles.card} style={{borderColor:'rgba(245,158,11,0.25)'}}>
+                      <div className={styles.cardTop}>
+                        <div className={styles.queueNum}>#{w.queue_number}</div>
+                        <div className={styles.customerInfo}>
+                          <div className={styles.customerName}>{w.customer_name || 'Walk-in Customer'}</div>
+                          {w.barber_name && <div className={styles.customerPhone}>{w.barber_name}</div>}
+                        </div>
+                        <span className="badge badge-warning">Walk-in</span>
+                      </div>
+                      <div className={styles.details}>
+                        <span>{w.service_name || 'No service'}</span>
+                        {w.service_price && <span style={{color:'#d4af37',fontWeight:600}}>₱{parseFloat(w.service_price).toFixed(2)}</span>}
+                      </div>
                     </div>
-                  )}
-                </div>
-                <div className={styles.actions} style={{flexWrap:'wrap',gap:8}}>
-                  <select className={styles.statusSelect} value={a.status} onChange={e => updateStatus(a.id, e.target.value)}>
-                    {STATUS_OPTS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-                  </select>
-                  {['pending','confirmed','in_progress'].includes(a.status) && (
-                    <button onClick={() => updateStatus(a.id, 'no_show')} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'#7c2d12',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
-                      <UserX size={13}/> No-Show
-                    </button>
-                  )}
-                  <button onClick={() => setRateModal(a)} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
-                    <Star size={13}/> Rate Customer
-                  </button>
-                  <button onClick={() => setBanModal(a)} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'#991b1b',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
-                    <Ban size={13}/> Ban
-                  </button>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        }
+        )}
 
         {rateModal && (
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
