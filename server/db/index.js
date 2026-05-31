@@ -1,23 +1,25 @@
 const { Pool } = require('pg');
 
-// NEON_DATABASE_URL takes priority over the Replit-managed DATABASE_URL
 const rawUrl = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL || '';
 
-// Strip unsupported channel_binding param that Neon includes but node-pg ignores
+// Strip unsupported channel_binding param and clean up
 const connectionString = rawUrl
   .replace(/[?&]channel_binding=[^&]*/g, '')
   .replace(/[&?]$/, '')
   .replace(/\?$/, '');
 
-const isNeon = connectionString.includes('neon.tech');
-
 const pool = new Pool({
   connectionString,
-  ssl: isNeon ? { rejectUnauthorized: false } : undefined,
+  // Always disable cert verification — works for both Replit-managed DB and Neon
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  allowExitOnIdle: false,
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected DB error', err.message);
+  console.error('Unexpected DB pool error:', err.message);
 });
 
 module.exports = pool;
