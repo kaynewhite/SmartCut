@@ -326,10 +326,6 @@ export default function CustomerAppointments() {
           </div>
         )}
       </div>
-
-      <style>{`
-        .${styles.cardHighlight} { border-color: rgba(212,175,55,0.3) !important; box-shadow: 0 0 0 1px rgba(212,175,55,0.1); }
-      `}</style>
     </Layout>
   );
 }

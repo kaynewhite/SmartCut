@@ -2,12 +2,13 @@
 .header { margin-bottom: 20px; }
 .header h1 { font-size: 26px; font-weight: 700; }
 .filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-.filterBtn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; transition: all 0.2s; white-space: nowrap; }
+.filterBtn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; transition: all 0.2s; white-space: nowrap; cursor: pointer; }
 .filterBtn.active { background: rgba(212,175,55,0.12); border-color: var(--gold); color: var(--gold); }
 .loading, .empty { text-align: center; padding: 60px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .bookBtn { background: var(--gold); color: #0a0e1a; padding: 8px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; }
 .list { display: flex; flex-direction: column; gap: 14px; }
-.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; transition: border-color 0.2s; }
+.cardHighlight { border-color: rgba(212,175,55,0.35) !important; box-shadow: 0 0 0 1px rgba(212,175,55,0.08); }
 .cardHeader {
   display: flex;
   align-items: flex-start;
@@ -22,13 +23,13 @@
 .detail { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); padding: 5px 10px; border-radius: 6px; }
 .price { font-weight: 700; color: var(--gold); }
 .notes { font-size: 12px; color: var(--text-muted); font-style: italic; margin-bottom: 12px; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.payBtn { display: flex; align-items: center; gap: 6px; background: var(--gold); color: #0a0e1a; border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-.cancelBtn { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--error); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-.rateBtn { display: flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-.queueBtn { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 8px 14px; border-radius: 8px; font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.payBtn { display: flex; align-items: center; gap: 6px; background: var(--gold); color: #0a0e1a; border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.cancelBtn { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--error); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.rateBtn { display: flex; align-items: center; gap: 6px; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.queueBtn { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 8px 14px; border-radius: 8px; font-size: 13px; text-decoration: none; }
 
-/* Modal — bottom sheet on mobile */
+/* Modal */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; }
 .modalCard {
   background: var(--bg-card);
@@ -36,28 +37,43 @@
   border-radius: 20px 20px 0 0;
   padding: 28px 24px;
   width: 100%;
-  max-width: 480px;
+  max-width: 520px;
   max-height: 92vh;
   overflow-y: auto;
 }
 .modalCard h3 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
 .modalSub { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
-.qrImg { width: 100%; max-width: 200px; display: block; margin: 0 auto 16px; border-radius: 10px; }
+
+/* Payment method selection */
+.pmGrid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.pmOpt { display: flex; align-items: center; gap: 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; transition: border-color 0.2s; }
+.pmOptActive { border-color: #16a34a !important; background: rgba(22,163,74,0.08) !important; }
+.pmTag { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; color: #fff; }
+.pmDetail { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.pmDetailRow { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+.pmDetailRow strong { color: var(--text-primary); }
+
+/* QR + upload */
+.qrImg { width: 100%; max-width: 200px; display: block; margin: 12px auto 0; border-radius: 10px; }
 .noQr { text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px; }
 .uploadArea { background: var(--bg-secondary); border: 2px dashed var(--border); border-radius: 10px; padding: 16px; text-align: center; margin-bottom: 16px; }
 .uploadLabel { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--gold); font-weight: 600; font-size: 13px; cursor: pointer; }
 .fileName { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+/* Rating */
 .ratingGroup { margin-bottom: 16px; }
 .ratingGroup label { font-size: 13px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px; }
-.starRow { display: flex; gap: 6px; }
-.commentBox { width: 100%; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text-primary); font-size: 16px; outline: none; resize: vertical; margin-bottom: 16px; }
+.starRow { display: flex; gap: 4px; }
+.commentBox { width: 100%; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text-primary); font-size: 16px; outline: none; resize: vertical; margin-bottom: 16px; box-sizing: border-box; }
 .modalActions { display: flex; gap: 10px; }
-.submitBtn { flex: 1; background: var(--gold); color: #0a0e1a; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; }
-.closeBtn2 { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 12px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+.submitBtn { flex: 1; background: var(--gold); color: #0a0e1a; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.submitBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.closeBtn2 { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 12px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
 
 @media (max-width: 600px) {
   .card { padding: 14px; }
   .header h1 { font-size: 22px; }
   .filters { gap: 6px; }
   .filterBtn { padding: 7px 12px; font-size: 12px; }
+  .modalCard { padding: 20px 16px; border-radius: 16px 16px 0 0; }
 }
