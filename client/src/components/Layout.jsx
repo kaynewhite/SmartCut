@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import toast from 'react-hot-toast';
 import { Scissors, Bell, LogOut, Menu, X, Home, Calendar, Clock, Star, User, Settings, Users, Briefcase, LayoutDashboard, MessageSquare, ChevronRight, Gift, History } from 'lucide-react';
 import styles from './Layout.module.css';
 
 export default function Layout({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -48,10 +49,29 @@ export default function Layout({ children }) {
 
   const links = isShop ? shopLinks : isBarber ? barberLinks : customerLinks;
 
+  // Sync subscription status from DB into localStorage/context so expiry is reflected without re-login
+  const syncSubscriptionStatus = async () => {
+    if (!user || !['customer', 'barbershop'].includes(user.type)) return;
+    try {
+      const res = await api.get('/subscriptions/status');
+      const liveActive = res.data?.is_active === true;
+      const localActive = user.subscription_status === 'active';
+      if (liveActive !== localActive) {
+        const newStatus = liveActive ? 'active' : 'inactive';
+        updateUser({ subscription_status: newStatus });
+        if (!liveActive && localActive) {
+          toast('Your subscription has expired. Please renew to continue.', { icon: '⏰', duration: 6000 });
+        }
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     fetchNotifications();
+    syncSubscriptionStatus();
     const interval = setInterval(fetchNotifications, 15000);
-    return () => clearInterval(interval);
+    const subInterval = setInterval(syncSubscriptionStatus, 5 * 60 * 1000); // sync every 5 min
+    return () => { clearInterval(interval); clearInterval(subInterval); };
   }, []);
 
   const fetchNotifications = async () => {

@@ -24,7 +24,10 @@ export default function CustomerExplore() {
   const [uploading, setUploading] = useState(false);
   const [subStatus, setSubStatus] = useState(null);
 
-  const isSubscribed = user?.subscription_status === 'active';
+  // Prefer live server status (subStatus) over stale localStorage value
+  const isSubscribed = subStatus !== null
+    ? subStatus.is_active === true
+    : user?.subscription_status === 'active';
 
   useEffect(() => {
     api.get('/barbers/specialties').then(res => setSpecialtyOptions(res.data || [])).catch(() => {});
