@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Landing from './pages/Landing';
+import ShopPreview from './pages/ShopPreview';
 
 import CustomerLogin from './pages/customer/Login';
 import CustomerRegister from './pages/customer/Register';
@@ -84,6 +85,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/shop/:id" element={<ShopPreview />} />
 
       <Route path="/admin-login" element={user?.type === 'admin' ? <Navigate to="/admin/dashboard" /> : <AdminLogin />} />
       <Route path="/admin/dashboard" element={<ProtectedAdmin><AdminDashboard /></ProtectedAdmin>} />
