@@ -4,8 +4,9 @@ import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
 import { Plus, CheckCircle, PlayCircle, RefreshCw, X, Users, Clock } from 'lucide-react';
 import styles from './Queue.module.css';
+import { formatTime, formatQueueNumber } from '../../utils/time';
 
-const REFRESH_INTERVAL = 20000; // 20 seconds
+const REFRESH_INTERVAL = 20000;
 
 export default function BarbershopQueue() {
   const [queue, setQueue] = useState({ walk_ins: [], appointments: [] });
@@ -47,7 +48,6 @@ export default function BarbershopQueue() {
 
   useEffect(() => {
     fetchData();
-    // Auto-refresh queue every 20 seconds
     const interval = setInterval(() => {
       setShopId(id => { if (id) fetchQueue(id); return id; });
     }, REFRESH_INTERVAL);
@@ -86,10 +86,9 @@ export default function BarbershopQueue() {
     } catch { toast.error('Failed'); }
   };
 
-  const totalWaiting =
-    queue.walk_ins.filter(w => w.status === 'waiting').length +
-    queue.appointments.filter(a => ['confirmed','pending'].includes(a.status)).length;
-
+  const waitingAppts = queue.appointments.filter(a => ['confirmed','pending'].includes(a.status));
+  const waitingWalkIns = queue.walk_ins.filter(w => w.status === 'waiting');
+  const totalWaiting = waitingAppts.length + waitingWalkIns.length;
   const inProgress =
     queue.walk_ins.filter(w => w.status === 'in_progress').length +
     queue.appointments.filter(a => a.status === 'in_progress').length;
@@ -101,7 +100,7 @@ export default function BarbershopQueue() {
           <div>
             <h1>Queue Management</h1>
             <div style={{ fontSize: 12, color: '#4b5563', marginTop: 2 }}>
-              Auto-refreshes every 20s · Last: {lastRefresh.toLocaleTimeString()}
+              Auto-refreshes every 20s · Last: {formatTime(lastRefresh.toTimeString().substring(0,5))}
             </div>
           </div>
           <div className={styles.headerBtns}>
@@ -125,31 +124,33 @@ export default function BarbershopQueue() {
           </div>
           <div className={styles.stat}>
             <div className={styles.statNum}>{queue.appointments.length + queue.walk_ins.length}</div>
-            <div className={styles.statLabel}>Total in Queue</div>
+            <div className={styles.statLabel}>Total</div>
           </div>
         </div>
 
         <div className={styles.sections}>
           {/* Appointment Queue */}
           <div className={styles.section}>
-            <h2>Appointment Queue <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queue.appointments.length})</span></h2>
+            <h2>Booked Appointments <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queue.appointments.length})</span></h2>
             {queue.appointments.length === 0 ? (
               <div className={styles.empty}>No appointments in queue right now</div>
             ) : (
               queue.appointments.map(a => (
                 <div key={a.id} className={`${styles.item} ${a.status === 'in_progress' ? styles.inProg : ''}`}>
-                  <div className={styles.qNum} title={`Queue slot #${a.queue_number}`}>{a.position}</div>
+                  <div className={styles.qNum} title={`Queue ${formatQueueNumber(a.queue_number)}`}>
+                    {formatQueueNumber(a.position)}
+                  </div>
                   <div className={styles.itemInfo}>
                     <div className={styles.itemName}>
-                      {a.customer_name || `Customer #${a.position}`}
+                      {a.customer_name || `Customer ${formatQueueNumber(a.position)}`}
                     </div>
                     <div className={styles.itemMeta}>
-                      {a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''} · {a.appointment_time?.substring(0, 5)}
-                      {a.duration_minutes && <span style={{ color: '#4b5563' }}> · {a.duration_minutes}min</span>}
+                      {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''} · {formatTime(a.appointment_time?.substring(0,5))}
+                      {a.duration_minutes && <span style={{ color: '#4b5563' }}> · {a.duration_minutes} min</span>}
                     </div>
                   </div>
                   <span className={`badge ${a.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
-                    {a.status === 'in_progress' ? 'In Progress' : 'Waiting'}
+                    {a.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
                   </span>
                 </div>
               ))
@@ -158,23 +159,23 @@ export default function BarbershopQueue() {
 
           {/* Walk-in Queue */}
           <div className={styles.section}>
-            <h2>Walk-in Queue <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queue.walk_ins.length})</span></h2>
+            <h2>Walk-ins <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queue.walk_ins.length})</span></h2>
             {queue.walk_ins.length === 0 ? (
               <div className={styles.empty}>No walk-ins · <button onClick={openAddModal} style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', fontWeight: 600, padding: 0 }}>Add one</button></div>
             ) : (
               queue.walk_ins.map(w => (
                 <div key={w.id} className={`${styles.item} ${w.status === 'in_progress' ? styles.inProg : ''}`}>
-                  <div className={styles.qNum}>{w.position}</div>
+                  <div className={styles.qNum}>{formatQueueNumber(w.position)}</div>
                   <div className={styles.itemInfo}>
                     <div className={styles.itemName}>{w.customer_name}</div>
                     <div className={styles.itemMeta}>
-                      {w.service_name || 'Walk-in'} {w.barber_name ? `· ${w.barber_name}` : ''}
-                      {w.duration_minutes && <span style={{ color: '#4b5563' }}> · {w.duration_minutes}min</span>}
+                      {w.service_name || 'Walk-in'}{w.barber_name ? ` · ${w.barber_name}` : ''}
+                      {w.duration_minutes && <span style={{ color: '#4b5563' }}> · {w.duration_minutes} min</span>}
                     </div>
                   </div>
                   <div className={styles.itemActions}>
                     <span className={`badge ${w.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
-                      {w.status === 'in_progress' ? 'In Progress' : 'Waiting'}
+                      {w.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
                     </span>
                     {w.status === 'waiting' && (
                       <button className={styles.startBtn} onClick={() => updateStatus(w.id, 'in_progress')} title="Start service">

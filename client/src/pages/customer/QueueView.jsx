@@ -5,8 +5,9 @@ import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import { Clock, Users, RefreshCw, CheckCircle } from 'lucide-react';
 import styles from './QueueView.module.css';
+import { formatTime, formatQueueNumber } from '../../utils/time';
 
-const REFRESH_INTERVAL = 20; // seconds
+const REFRESH_INTERVAL = 20;
 
 export default function CustomerQueue() {
   const { shopId } = useParams();
@@ -30,7 +31,6 @@ export default function CustomerQueue() {
   useEffect(() => {
     fetchQueue();
     const interval = setInterval(fetchQueue, REFRESH_INTERVAL * 1000);
-    // Countdown ticker
     countdownRef.current = setInterval(() => {
       setCountdown(c => (c <= 1 ? REFRESH_INTERVAL : c - 1));
     }, 1000);
@@ -41,14 +41,9 @@ export default function CustomerQueue() {
   }, [shopId]);
 
   const myAppointment = queue.appointments.find(a => String(a.customer_id) === String(user?.id));
-
-  // Dynamic position from backend (1 = first in line right now)
   const myPosition = myAppointment?.position ?? null;
-
-  // People actively ahead of me (pending/confirmed before me + anyone in_progress before me)
   const peopleAhead = myPosition ? myPosition - 1 : null;
 
-  // Estimated wait: sum duration_minutes of all appts ahead in queue
   const estWaitMinutes = (() => {
     if (!myAppointment) return null;
     const ahead = queue.appointments.filter(a =>
@@ -75,7 +70,7 @@ export default function CustomerQueue() {
           </button>
         </div>
         <p className={styles.updated}>
-          Updated {lastUpdate.toLocaleTimeString()} · auto-refreshes in {countdown}s
+          Updated {formatTime(lastUpdate.toTimeString().substring(0,5))} · auto-refreshes in {countdown}s
         </p>
 
         {/* MY POSITION CARD */}
@@ -94,17 +89,18 @@ export default function CustomerQueue() {
                 </div>
                 <div>
                   <div style={{ color: '#3b82f6', fontWeight: 800, fontSize: 18 }}>✂️ You're being served now!</div>
-                  <div style={{ color: '#8b92a9', fontSize: 13 }}>{myAppointment.service_name} {myAppointment.barber_name ? `· ${myAppointment.barber_name}` : ''}</div>
+                  <div style={{ color: '#8b92a9', fontSize: 13 }}>{myAppointment.service_name}{myAppointment.barber_name ? ` · ${myAppointment.barber_name}` : ''}</div>
                 </div>
               </div>
             ) : (
               <div>
                 <div style={{ color: '#d4af37', fontWeight: 700, fontSize: 12, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>📍 Your Position</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                  <div style={{ textAlign: 'center', minWidth: 70 }}>
-                    <div style={{ color: '#d4af37', fontWeight: 800, fontSize: 42, lineHeight: 1 }}>{myPosition}</div>
+                  <div style={{ textAlign: 'center', minWidth: 80 }}>
+                    <div style={{ color: '#d4af37', fontWeight: 900, fontSize: 15, letterSpacing: 1, marginBottom: 2 }}>Queue</div>
+                    <div style={{ color: '#d4af37', fontWeight: 800, fontSize: 44, lineHeight: 1, letterSpacing: 2 }}>{formatQueueNumber(myPosition)}</div>
                     <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 4 }}>
-                      {myPosition === 1 ? '🎉 You\'re next!' : `in queue`}
+                      {myPosition === 1 ? '🎉 You\'re next!' : 'in line'}
                     </div>
                   </div>
                   <div style={{ flex: 1 }}>
@@ -113,7 +109,7 @@ export default function CustomerQueue() {
                       {myAppointment.barber_name && <span style={{ color: '#8b92a9', fontWeight: 400 }}> · {myAppointment.barber_name}</span>}
                     </div>
                     <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>
-                      <Clock size={12} style={{ verticalAlign: 'middle' }} /> {myAppointment.appointment_time?.substring(0, 5)}
+                      <Clock size={12} style={{ verticalAlign: 'middle' }} /> {formatTime(myAppointment.appointment_time?.substring(0, 5))}
                     </div>
                     {peopleAhead > 0 && (
                       <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>
@@ -165,7 +161,7 @@ export default function CustomerQueue() {
               <div className={styles.statNum}>
                 {totalWaiting === 0 ? '0' : `~${queue.appointments.slice(0, totalWaiting).reduce((s, a) => s + (parseInt(a.duration_minutes) || 20), 0)}`}
               </div>
-              <div className={styles.statLabel}>Est. Total Wait (min)</div>
+              <div className={styles.statLabel}>Est. Wait (min)</div>
             </div>
           </div>
         </div>
@@ -184,16 +180,16 @@ export default function CustomerQueue() {
                     style={isMe ? { border: '2px solid rgba(212,175,55,0.6)', background: 'rgba(212,175,55,0.07)' } : {}}
                   >
                     <div className={styles.queueNum} style={isMe ? { color: '#d4af37', fontWeight: 800 } : {}}>
-                      {a.position}
+                      {formatQueueNumber(a.position)}
                     </div>
                     <div className={styles.queueInfo}>
                       <div className={styles.queueName}>
-                        {isMe ? '⭐ You' : `Customer #${a.position}`}
+                        {isMe ? '⭐ You' : `Customer ${formatQueueNumber(a.position)}`}
                       </div>
                       <div className={styles.queueMeta}>
-                        {a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''}
+                        {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''}
                       </div>
-                      <div className={styles.queueTime}><Clock size={12} /> {a.appointment_time?.substring(0, 5)}</div>
+                      <div className={styles.queueTime}><Clock size={12} /> {formatTime(a.appointment_time?.substring(0, 5))}</div>
                     </div>
                     <span className={`badge ${a.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
                       {a.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
@@ -212,10 +208,10 @@ export default function CustomerQueue() {
             <div className={styles.queueList}>
               {queue.walk_ins.map(w => (
                 <div key={w.id} className={`${styles.queueItem} ${w.status === 'in_progress' ? styles.inProgress : ''}`}>
-                  <div className={styles.queueNum}>{w.position}</div>
+                  <div className={styles.queueNum}>{formatQueueNumber(w.position)}</div>
                   <div className={styles.queueInfo}>
-                    <div className={styles.queueName}>Walk-in #{w.position}</div>
-                    <div className={styles.queueMeta}>{w.service_name || 'Walk-in'} {w.barber_name ? `· ${w.barber_name}` : ''}</div>
+                    <div className={styles.queueName}>Walk-in {formatQueueNumber(w.position)}</div>
+                    <div className={styles.queueMeta}>{w.service_name || 'Walk-in'}{w.barber_name ? ` · ${w.barber_name}` : ''}</div>
                   </div>
                   <span className={`badge ${w.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
                     {w.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}

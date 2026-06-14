@@ -73,9 +73,16 @@ router.put('/me/password', authenticateCustomer, async (req, res) => {
 
 router.get('/me/loyalty', authenticateCustomer, async (req, res) => {
   try {
-    const cust = await pool.query('SELECT loyalty_points FROM customers WHERE id = $1', [req.user.id]);
-    const result = await pool.query('SELECT * FROM loyalty_transactions WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]);
-    res.json({ total_points: cust.rows[0]?.loyalty_points || 0, history: result.rows });
+    const shopsResult = await pool.query(
+      `SELECT csl.barbershop_id, b.name as barbershop_name, b.logo_url as barbershop_logo, csl.points, csl.updated_at
+       FROM customer_shop_loyalty csl
+       JOIN barbershops b ON b.id = csl.barbershop_id
+       WHERE csl.customer_id = $1 AND csl.points > 0
+       ORDER BY csl.points DESC`,
+      [req.user.id]
+    );
+    const total = shopsResult.rows.reduce((sum, r) => sum + (parseInt(r.points) || 0), 0);
+    res.json({ total_points: total, shops: shopsResult.rows });
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 

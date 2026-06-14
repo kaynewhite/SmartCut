@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon, Lock, Camera } from 'lucide-react';
+import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon, Lock, Camera, Scissors } from 'lucide-react';
 
 const TAB_LIST = ['profile', 'loyalty', 'subscription', 'reports'];
 
@@ -11,7 +11,7 @@ export default function CustomerProfile() {
   const { user, updateUser } = useAuth();
   const [tab, setTab] = useState('profile');
   const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
-  const [loyalty, setLoyalty] = useState({ total_points: 0, history: [] });
+  const [loyalty, setLoyalty] = useState({ total_points: 0, shops: [] });
   const [saving, setSaving] = useState(false);
   const [subStatus, setSubStatus] = useState(null);
   const [adminQr, setAdminQr] = useState(null);
@@ -101,7 +101,6 @@ export default function CustomerProfile() {
     finally { setSubmittingReport(false); }
   };
 
-  // Determine subscription display
   const subState = subStatus?.is_active ? 'active'
     : subStatus?.subscription?.status === 'pending' ? 'pending'
     : user?.subscription_status === 'restricted' ? 'restricted'
@@ -136,15 +135,12 @@ export default function CustomerProfile() {
           <div style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 18 }}>{user?.name}</div>
           <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>{user?.email}</div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-            {/* Loyalty points */}
             <span style={{ padding: '4px 12px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 20, color: '#d4af37', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
               <Gift size={12} /> {loyalty.total_points} pts total
             </span>
-            {/* Subscription status badge */}
             <span style={{ padding: '4px 12px', background: subBadge.bg, border: `1px solid ${subBadge.border}`, borderRadius: 20, color: subBadge.color, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
               {subBadge.icon} {subBadge.label}
             </span>
-            {/* No-show badge */}
             {user?.no_show_count > 0 && (
               <span style={{ padding: '4px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 20, color: '#ef4444', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <AlertCircle size={12} /> {user.no_show_count} no-shows
@@ -211,26 +207,52 @@ export default function CustomerProfile() {
         )}
 
         {tab === 'loyalty' && (
-          <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, margin: 0 }}>Loyalty Points</h2>
-              <span style={{ color: '#d4af37', fontWeight: 700, fontSize: 20 }}>{loyalty.total_points} pts</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Total points summary */}
+            <div style={{ background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 12, padding: '20px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 52, height: 52, borderRadius: 12, background: 'rgba(212,175,55,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Gift size={26} color="#d4af37" />
+              </div>
+              <div>
+                <div style={{ color: '#8b92a9', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Total Loyalty Points</div>
+                <div style={{ color: '#d4af37', fontWeight: 800, fontSize: 32, lineHeight: 1 }}>{loyalty.total_points}</div>
+                <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 4 }}>across {loyalty.shops?.length || 0} barbershop{(loyalty.shops?.length || 0) !== 1 ? 's' : ''}</div>
+              </div>
             </div>
-            <p style={{ color: '#8b92a9', fontSize: 13, marginBottom: 16 }}>Points are earned per barbershop. Visit individual shop pages to redeem promos.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {!loyalty.history?.length ? (
-                <div style={{ textAlign: 'center', padding: '30px 0', color: '#8b92a9', fontSize: 13 }}>No loyalty transactions yet</div>
-              ) : loyalty.history?.map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#0a1020', borderRadius: 8 }}>
-                  <div>
-                    <div style={{ color: '#f0f0f0', fontSize: 13 }}>{t.description || 'Points earned'}</div>
-                    <div style={{ color: '#8b92a9', fontSize: 11, marginTop: 2 }}>{t.barbershop_name && `at ${t.barbershop_name} · `}{new Date(t.created_at).toLocaleDateString()}</div>
-                  </div>
-                  <span style={{ color: t.points > 0 ? '#10b981' : '#ef4444', fontWeight: 700, fontSize: 15 }}>
-                    {t.points > 0 ? '+' : ''}{t.points} pts
-                  </span>
+
+            {/* Per-shop loyalty breakdown */}
+            <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
+              <h3 style={{ color: '#f0f0f0', fontSize: 15, fontWeight: 600, marginTop: 0, marginBottom: 4 }}>Points by Shop</h3>
+              <p style={{ color: '#8b92a9', fontSize: 12, marginBottom: 16, marginTop: 0 }}>Points are earned per barbershop. Visit a shop's page to redeem promos.</p>
+              {!loyalty.shops?.length ? (
+                <div style={{ textAlign: 'center', padding: '36px 0', color: '#8b92a9', fontSize: 13 }}>
+                  <Scissors size={32} color="#374151" style={{ marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
+                  <div>No loyalty points yet.</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>Complete appointments to start earning points.</div>
                 </div>
-              ))}
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {loyalty.shops.map((shop, i) => (
+                    <div key={shop.barbershop_id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: '#0a1020', borderRadius: 10, border: '1px solid #1e2a3a' }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 8, background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {shop.barbershop_logo ? (
+                          <img src={shop.barbershop_logo} alt={shop.barbershop_name} style={{ width: 38, height: 38, borderRadius: 8, objectFit: 'cover' }} />
+                        ) : (
+                          <Scissors size={18} color="#d4af37" />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: '#f0f0f0', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shop.barbershop_name}</div>
+                        <div style={{ color: '#8b92a9', fontSize: 11, marginTop: 2 }}>Last visit: {new Date(shop.updated_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ color: '#d4af37', fontWeight: 800, fontSize: 22, lineHeight: 1 }}>{shop.points}</div>
+                        <div style={{ color: '#8b92a9', fontSize: 11, marginTop: 2 }}>pts</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -242,7 +264,6 @@ export default function CustomerProfile() {
               <MapIcon size={14} color="#d4af37" /> Subscribe to unlock map view and discover barbershops near you.
             </p>
 
-            {/* Status Card */}
             <div style={{ padding: '14px 18px', background: subBadge.bg, border: `1px solid ${subBadge.border}`, borderRadius: 10, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 24 }}>
                 {subState === 'active' ? '✅' : subState === 'pending' ? '⏳' : subState === 'restricted' ? '⛔' : '🔒'}

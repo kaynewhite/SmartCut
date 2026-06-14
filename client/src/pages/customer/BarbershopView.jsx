@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import Layout from '../../components/Layout';
 import Map from '../../components/Map';
-import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight, Gift } from 'lucide-react';
+import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight, Gift, CheckCircle, X, Calendar } from 'lucide-react';
 import styles from './BarbershopView.module.css';
+import { formatTime } from '../../utils/time';
 
 export default function CustomerBarbershop() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('services');
   const [points, setPoints] = useState(0);
   const [promos, setPromos] = useState([]);
   const [redeeming, setRedeeming] = useState(null);
+  const [bookPrompt, setBookPrompt] = useState(null); // { promo, redemption_code, barber_id }
 
   const refreshLoyalty = () => {
     api.get(`/loyalty-promos/balance/${id}`).then(r => setPoints(r.data.points || 0)).catch(() => {});
@@ -34,8 +37,18 @@ export default function CustomerBarbershop() {
       const res = await api.post(`/loyalty-promos/${promo.id}/redeem`);
       toast.success(`Redeemed! Code: ${res.data.redemption_code}`);
       refreshLoyalty();
+      // Prompt to book appointment after redemption
+      setBookPrompt({ promo, redemption_code: res.data.redemption_code, barber_id: promo.barber_id });
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
     finally { setRedeeming(null); }
+  };
+
+  const goBook = () => {
+    const barberId = bookPrompt?.barber_id;
+    let url = `/customer/book/${id}`;
+    if (barberId) url += `?barber=${barberId}`;
+    setBookPrompt(null);
+    navigate(url);
   };
 
   if (loading) return <Layout><div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Loading...</div></Layout>;
@@ -58,7 +71,7 @@ export default function CustomerBarbershop() {
                 <div className={styles.shopMeta}>
                   {shop.city && <span><MapPin size={13} /> {shop.city}</span>}
                   <span><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(shop.avg_rating).toFixed(1)} ({shop.review_count} reviews)</span>
-                  {shop.opening_time && <span><Clock size={13} /> {shop.opening_time?.substring(0,5)} - {shop.closing_time?.substring(0,5)}</span>}
+                  {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time?.substring(0,5))} – {formatTime(shop.closing_time?.substring(0,5))}</span>}
                 </div>
               </div>
               <Link to={`/customer/book/${id}`} className={styles.bookBtn}>Book Now <ChevronRight size={16} /></Link>
@@ -170,6 +183,17 @@ export default function CustomerBarbershop() {
                         <div style={{padding:14}}>
                           <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
                           {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
+                          {p.barber_name && (
+                            <div style={{marginTop:8,display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#8b92a9'}}>
+                              <Scissors size={11} color="#d4af37" />
+                              <span>Barber: <strong style={{color:'#f0f0f0'}}>{p.barber_name}</strong></span>
+                              {p.barber_available !== undefined && (
+                                <span style={{padding:'1px 6px',borderRadius:3,fontSize:10,background:p.barber_available?'rgba(16,185,129,0.15)':'rgba(239,68,68,0.15)',color:p.barber_available?'#10b981':'#ef4444'}}>
+                                  {p.barber_available ? 'Available' : 'Busy'}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
                             <span style={{color:'#d4af37',fontWeight:700,fontSize:14,display:'inline-flex',alignItems:'center',gap:4}}><Gift size={12}/>{p.points_cost} pts</span>
                             <button onClick={() => redeem(p)} disabled={!canAfford || redeeming === p.id}
@@ -212,14 +236,7 @@ export default function CustomerBarbershop() {
                 <Map
                   center={[shop.latitude, shop.longitude]}
                   zoom={16}
-                  markers={[{
-                    id: shop.id,
-                    name: shop.name,
-                    address: shop.address,
-                    city: shop.city,
-                    latitude: shop.latitude,
-                    longitude: shop.longitude
-                  }]}
+                  markers={[{ id: shop.id, name: shop.name, address: shop.address, city: shop.city, latitude: shop.latitude, longitude: shop.longitude }]}
                   height="400px"
                   interactive={false}
                 />
@@ -239,6 +256,45 @@ export default function CustomerBarbershop() {
           )}
         </div>
       </div>
+
+      {/* Book after promo redemption prompt */}
+      {bookPrompt && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+          <div style={{background:'#1a2234',border:'1px solid rgba(212,175,55,0.4)',borderRadius:14,padding:28,maxWidth:420,width:'100%',position:'relative'}}>
+            <button onClick={() => setBookPrompt(null)} style={{position:'absolute',top:14,right:14,background:'none',border:'none',color:'#8b92a9',cursor:'pointer',padding:4}}>
+              <X size={18} />
+            </button>
+            <div style={{textAlign:'center',marginBottom:20}}>
+              <div style={{width:56,height:56,borderRadius:12,background:'rgba(16,185,129,0.15)',border:'1px solid rgba(16,185,129,0.4)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}>
+                <CheckCircle size={30} color="#10b981" />
+              </div>
+              <h3 style={{color:'#f0f0f0',margin:'0 0 6px',fontSize:18}}>Promo Redeemed!</h3>
+              <p style={{color:'#8b92a9',fontSize:13,margin:0}}>"{bookPrompt.promo.name}"</p>
+              <div style={{marginTop:10,padding:'8px 14px',background:'rgba(212,175,55,0.1)',border:'1px solid rgba(212,175,55,0.3)',borderRadius:8,display:'inline-block'}}>
+                <span style={{color:'#d4af37',fontWeight:700,fontSize:15,letterSpacing:2}}>{bookPrompt.redemption_code}</span>
+              </div>
+              <p style={{color:'#8b92a9',fontSize:11,marginTop:6}}>Show this code to the barber</p>
+            </div>
+            {bookPrompt.promo.barber_name && (
+              <div style={{padding:'10px 14px',background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:8,marginBottom:16,fontSize:13,color:'#93c5fd',display:'flex',alignItems:'center',gap:8}}>
+                <Scissors size={14} color="#60a5fa" />
+                This promo is for barber <strong style={{color:'#f0f0f0'}}>{bookPrompt.promo.barber_name}</strong>
+              </div>
+            )}
+            <p style={{color:'#8b92a9',fontSize:13,textAlign:'center',marginBottom:18}}>
+              Would you like to book an appointment now to use this promo?
+            </p>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={goBook} style={{flex:1,padding:'12px',background:'#d4af37',color:'#0f1422',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                <Calendar size={16} /> Book Appointment
+              </button>
+              <button onClick={() => setBookPrompt(null)} style={{flex:1,padding:'12px',background:'transparent',color:'#8b92a9',border:'1px solid #2d3748',borderRadius:8,fontWeight:600,fontSize:14,cursor:'pointer'}}>
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

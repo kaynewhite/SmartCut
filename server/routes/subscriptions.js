@@ -19,7 +19,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
-// Check own subscription status
+// Check own subscription status (also auto-expires if needed)
 router.get('/status', authenticate, async (req, res) => {
   try {
     const { type, id } = req.user;
@@ -28,10 +28,20 @@ router.get('/status', authenticate, async (req, res) => {
       `SELECT * FROM subscriptions WHERE subscriber_type=$1 AND subscriber_id=$2 ORDER BY created_at DESC LIMIT 1`,
       [type, id]
     );
+    const sub = result.rows[0] || null;
     const table = type === 'barbershop' ? 'barbershops' : 'customers';
+
+    // Auto-expire if the active subscription has passed its expiry date
+    if (sub && sub.status === 'active' && sub.expires_at && new Date(sub.expires_at) < new Date()) {
+      await pool.query(`UPDATE subscriptions SET status='expired' WHERE id=$1`, [sub.id]);
+      await pool.query(`UPDATE ${table} SET subscription_status='inactive' WHERE id=$1`, [id]);
+      sub.status = 'expired';
+      return res.json({ subscription: sub, is_active: false });
+    }
+
     const userRow = await pool.query(`SELECT subscription_status FROM ${table} WHERE id=$1`, [id]);
     res.json({
-      subscription: result.rows[0] || null,
+      subscription: sub,
       is_active: userRow.rows[0]?.subscription_status === 'active'
     });
   } catch (err) { res.status(500).json({ message: 'Server error' }); }

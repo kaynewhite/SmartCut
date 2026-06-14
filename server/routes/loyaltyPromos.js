@@ -23,8 +23,11 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
 router.get('/', async (req, res) => {
   try {
     const { barbershop_id } = req.query;
-    let q = `SELECT p.*, b.name as barbershop_name, b.logo_url as barbershop_logo, b.city as barbershop_city
-             FROM loyalty_promos p JOIN barbershops b ON b.id = p.barbershop_id
+    let q = `SELECT p.*, b.name as barbershop_name, b.logo_url as barbershop_logo, b.city as barbershop_city,
+             br.name as barber_name, br.photo_url as barber_photo, br.is_available as barber_available
+             FROM loyalty_promos p
+             JOIN barbershops b ON b.id = p.barbershop_id
+             LEFT JOIN barbers br ON br.id = p.barber_id
              WHERE p.is_active = true AND b.is_active = true`;
     const params = [];
     if (barbershop_id) { params.push(barbershop_id); q += ` AND p.barbershop_id = $1`; }
@@ -34,10 +37,16 @@ router.get('/', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// AUTH (OWNER): list my promos
+// AUTH (OWNER): list my promos (includes barber info)
 router.get('/me', authenticateBarbershop, async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM loyalty_promos WHERE barbershop_id = $1 ORDER BY id DESC', [req.user.id]);
+    const r = await pool.query(
+      `SELECT p.*, br.name as barber_name, br.is_available as barber_available
+       FROM loyalty_promos p
+       LEFT JOIN barbers br ON br.id = p.barber_id
+       WHERE p.barbershop_id = $1 ORDER BY p.id DESC`,
+      [req.user.id]
+    );
     res.json(r.rows);
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
@@ -45,14 +54,19 @@ router.get('/me', authenticateBarbershop, async (req, res) => {
 // AUTH (OWNER): create
 router.post('/me', authenticateBarbershop, upload.single('image'), async (req, res) => {
   try {
-    const { name, description, points_cost } = req.body;
+    const { name, description, points_cost, barber_id } = req.body;
     if (!name || !points_cost) return res.status(400).json({ message: 'Name and points cost are required' });
     const cost = parseInt(points_cost);
     if (isNaN(cost) || cost < 1) return res.status(400).json({ message: 'Points cost must be at least 1' });
     const image_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const barberId = barber_id && barber_id !== '' ? parseInt(barber_id) : null;
+    if (barberId) {
+      const barberCheck = await pool.query('SELECT id FROM barbers WHERE id=$1 AND barbershop_id=$2', [barberId, req.user.id]);
+      if (!barberCheck.rows.length) return res.status(400).json({ message: 'Barber does not belong to this shop' });
+    }
     const r = await pool.query(
-      `INSERT INTO loyalty_promos (barbershop_id, name, description, points_cost, image_url) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.user.id, name, description || null, cost, image_url]
+      `INSERT INTO loyalty_promos (barbershop_id, name, description, points_cost, image_url, barber_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.id, name, description || null, cost, image_url, barberId]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
@@ -61,17 +75,23 @@ router.post('/me', authenticateBarbershop, upload.single('image'), async (req, r
 // AUTH (OWNER): update
 router.put('/me/:id', authenticateBarbershop, upload.single('image'), async (req, res) => {
   try {
-    const { name, description, points_cost, is_active } = req.body;
+    const { name, description, points_cost, is_active, barber_id } = req.body;
     const existing = await pool.query('SELECT * FROM loyalty_promos WHERE id = $1 AND barbershop_id = $2', [req.params.id, req.user.id]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
     const image_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].image_url;
+    const barberId = barber_id === '' ? null : (barber_id !== undefined ? parseInt(barber_id) : existing.rows[0].barber_id);
+    if (barberId) {
+      const barberCheck = await pool.query('SELECT id FROM barbers WHERE id=$1 AND barbershop_id=$2', [barberId, req.user.id]);
+      if (!barberCheck.rows.length) return res.status(400).json({ message: 'Barber does not belong to this shop' });
+    }
     const r = await pool.query(
-      `UPDATE loyalty_promos SET name=$1, description=$2, points_cost=$3, image_url=$4, is_active=$5
-       WHERE id=$6 AND barbershop_id=$7 RETURNING *`,
+      `UPDATE loyalty_promos SET name=$1, description=$2, points_cost=$3, image_url=$4, is_active=$5, barber_id=$6
+       WHERE id=$7 AND barbershop_id=$8 RETURNING *`,
       [name || existing.rows[0].name, description ?? existing.rows[0].description,
        points_cost ? parseInt(points_cost) : existing.rows[0].points_cost,
        image_url,
        is_active !== undefined ? (is_active === 'true' || is_active === true) : existing.rows[0].is_active,
+       barberId !== undefined ? barberId : existing.rows[0].barber_id,
        req.params.id, req.user.id]
     );
     res.json(r.rows[0]);

@@ -81,12 +81,34 @@ async function runMigrations() {
       barbershop_id INTEGER NOT NULL,
       points_spent INTEGER NOT NULL,
       redemption_code TEXT,
+      status TEXT DEFAULT 'pending',
+      appointment_id INTEGER,
       created_at TIMESTAMP DEFAULT NOW()
     )`,
+    `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'`,
+    `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS appointment_id INTEGER`,
+    `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL`,
   ];
   for (const sql of migrations) {
     try { await pool.query(sql); } catch (err) { console.error('Migration error:', err.message); }
   }
+}
+
+// Auto-expire subscriptions whose expires_at has passed
+async function expireSubscriptions() {
+  try {
+    const expired = await pool.query(
+      `SELECT s.id, s.subscriber_type, s.subscriber_id
+       FROM subscriptions s
+       WHERE s.status = 'active' AND s.expires_at IS NOT NULL AND s.expires_at < NOW()`
+    );
+    for (const s of expired.rows) {
+      await pool.query(`UPDATE subscriptions SET status='expired' WHERE id=$1`, [s.id]);
+      const table = s.subscriber_type === 'barbershop' ? 'barbershops' : 'customers';
+      await pool.query(`UPDATE ${table} SET subscription_status='inactive' WHERE id=$1`, [s.subscriber_id]);
+    }
+    if (expired.rows.length > 0) console.log(`Expired ${expired.rows.length} subscription(s)`);
+  } catch (err) { console.error('Expiry job error:', err.message); }
 }
 
 async function seedAdmin() {
@@ -105,6 +127,8 @@ async function seedAdmin() {
 pool.query('SELECT NOW()').then(async () => {
   await runMigrations();
   await seedAdmin();
+  await expireSubscriptions();
+  setInterval(expireSubscriptions, 60 * 60 * 1000); // check every hour
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`SmartCut API running on port ${PORT}`);
   });

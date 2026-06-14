@@ -3,14 +3,15 @@ import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Calendar, Clock, Scissors, Upload, Star, CheckCircle, Home, MapPin, Bell, X } from 'lucide-react';
+import { Calendar, Clock, Scissors, Upload, Star, CheckCircle, Home, Bell, X, ChevronDown } from 'lucide-react';
 import styles from './Appointments.module.css';
+import { formatTime, formatQueueNumber } from '../../utils/time';
 
 const STATUS_COLOR = { pending: 'warning', confirmed: 'success', in_progress: 'info', completed: 'success', cancelled: 'error', no_show: 'error' };
 const STATUS_LABEL = { pending: 'Pending', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', no_show: 'No Show' };
 
 const TYPE_META = {
-  online: { label: 'Online', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+  online: { label: 'In-Store', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
   home_service: { label: 'Home Service', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
 };
 
@@ -26,7 +27,8 @@ const PM_COLORS = {
 export default function CustomerAppointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [ratingModal, setRatingModal] = useState(null);
   const [payModal, setPayModal] = useState(null);
   const [payMethods, setPayMethods] = useState([]);
@@ -47,14 +49,20 @@ export default function CustomerAppointments() {
     setLoading(false);
   };
 
+  const typeOf = (a) => a.is_home_service ? 'home_service' : 'online';
+
   const filtered = appointments.filter(a => {
-    if (filter === 'active') return ['pending', 'confirmed', 'in_progress'].includes(a.status);
-    if (filter === 'completed') return a.status === 'completed';
-    if (filter === 'cancelled') return ['cancelled', 'no_show'].includes(a.status);
-    return true;
+    const statusMatch =
+      statusFilter === 'active' ? ['pending', 'confirmed', 'in_progress'].includes(a.status) :
+      statusFilter === 'completed' ? a.status === 'completed' :
+      statusFilter === 'cancelled' ? ['cancelled', 'no_show'].includes(a.status) : true;
+    const typeMatch =
+      typeFilter === 'all' ? true :
+      typeFilter === 'home' ? a.is_home_service :
+      !a.is_home_service;
+    return statusMatch && typeMatch;
   });
 
-  // Completed appointments that need action (pay or rate)
   const needsAction = appointments.filter(a =>
     a.status === 'completed' && (a.payment_status === 'unpaid' || (a.payment_status === 'paid' && !a.rating_id))
   );
@@ -106,16 +114,25 @@ export default function CustomerAppointments() {
     finally { setSubmittingRating(false); }
   };
 
-  const typeOf = (a) => a.is_home_service ? 'home_service' : 'online';
+  const STATUS_FILTERS = [
+    { value: 'active', label: 'Active' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'all', label: 'All' },
+  ];
+  const TYPE_FILTERS = [
+    { value: 'all', label: 'All Types' },
+    { value: 'instore', label: 'In-Store' },
+    { value: 'home', label: 'Home Service' },
+  ];
 
   return (
     <Layout>
       <div className={styles.page}>
         <div className={styles.header}><h1>My Appointments</h1></div>
 
-        {/* Action required banner - for completed appointments needing payment/rating */}
-        {needsAction.length > 0 && filter !== 'completed' && (
-          <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setFilter('completed')}>
+        {needsAction.length > 0 && statusFilter !== 'completed' && (
+          <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setStatusFilter('completed')}>
             <Bell size={16} color="#d4af37" />
             <div style={{ flex: 1 }}>
               <div style={{ color: '#d4af37', fontWeight: 600, fontSize: 13 }}>Action Required</div>
@@ -125,11 +142,21 @@ export default function CustomerAppointments() {
           </div>
         )}
 
+        {/* Status filters */}
         <div className={styles.filters}>
-          {[['active', 'Active'], ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All']].map(([v, l]) => (
-            <button key={v} className={`${styles.filterBtn} ${filter === v ? styles.active : ''}`} onClick={() => setFilter(v)}>
-              {l}
-              {v === 'completed' && needsAction.length > 0 && <span style={{ marginLeft: 6, background: '#d4af37', color: '#0f1422', borderRadius: 99, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{needsAction.length}</span>}
+          {STATUS_FILTERS.map(({ value, label }) => (
+            <button key={value} className={`${styles.filterBtn} ${statusFilter === value ? styles.active : ''}`} onClick={() => setStatusFilter(value)}>
+              {label}
+              {value === 'completed' && needsAction.length > 0 && <span style={{ marginLeft: 6, background: '#d4af37', color: '#0f1422', borderRadius: 99, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{needsAction.length}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Type filters */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {TYPE_FILTERS.map(({ value, label }) => (
+            <button key={value} onClick={() => setTypeFilter(value)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${typeFilter === value ? '#d4af37' : '#1e2a3a'}`, background: typeFilter === value ? 'rgba(212,175,55,0.1)' : 'transparent', color: typeFilter === value ? '#d4af37' : '#6b7280', fontSize: 12, cursor: 'pointer', fontWeight: typeFilter === value ? 600 : 400 }}>
+              {label}
             </button>
           ))}
         </div>
@@ -147,7 +174,6 @@ export default function CustomerAppointments() {
                 const tm = TYPE_META[typeOf(a)] || TYPE_META.online;
                 const needsPay = a.status === 'completed' && a.payment_status === 'unpaid';
                 const needsRate = a.status === 'completed' && a.payment_status === 'paid' && !a.rating_id;
-                const canPayBeforeCompletion = ['pending', 'confirmed'].includes(a.status) && a.payment_status === 'unpaid';
 
                 return (
                   <div key={a.id} className={`${styles.card} ${needsPay || needsRate ? styles.cardHighlight : ''}`}>
@@ -163,9 +189,16 @@ export default function CustomerAppointments() {
                     </div>
 
                     <div className={styles.details}>
-                      <div className={styles.detail}><Scissors size={14} /> {a.service_name} {a.barber_name ? `• ${a.barber_name}` : ''}</div>
+                      <div className={styles.detail}><Scissors size={14} /> {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''}</div>
                       <div className={styles.detail}><Calendar size={14} /> {new Date(a.appointment_date).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                      <div className={styles.detail}><Clock size={14} /> {a.appointment_time?.substring(0, 5)}{a.queue_number ? ` • Queue #${a.queue_number}` : ''}</div>
+                      <div className={styles.detail}>
+                        <Clock size={14} /> {formatTime(a.appointment_time?.substring(0, 5))}
+                        {a.queue_number && ['pending','confirmed','in_progress'].includes(a.status) && (
+                          <span style={{ marginLeft: 8, padding: '1px 8px', background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 4, color: '#d4af37', fontSize: 11, fontWeight: 600 }}>
+                            Queue {formatQueueNumber(a.queue_number)}
+                          </span>
+                        )}
+                      </div>
                       {a.is_home_service && a.home_address && (
                         <div className={styles.detail}><Home size={14} color="#8b5cf6" /> <span style={{ color: '#8b5cf6' }}>{a.home_address}</span></div>
                       )}
@@ -179,14 +212,12 @@ export default function CustomerAppointments() {
 
                     {a.notes && <div className={styles.notes}>Note: {a.notes}</div>}
 
-                    {/* "Please pay" prompt for completed-but-unpaid */}
                     {needsPay && (
                       <div style={{ margin: '10px 0 6px', padding: '10px 12px', background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Bell size={14} color="#d4af37" />
                         <div style={{ flex: 1, fontSize: 12, color: '#d4af37' }}>Your service is done! Please complete your payment.</div>
                       </div>
                     )}
-                    {/* "Please rate" prompt for paid-but-unrated */}
                     {needsRate && (
                       <div style={{ margin: '10px 0 6px', padding: '10px 12px', background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Star size={14} color="#10b981" />
@@ -195,17 +226,12 @@ export default function CustomerAppointments() {
                     )}
 
                     <div className={styles.actions}>
-                      {/* Pay before completion (optional pre-payment) */}
-                      {canPayBeforeCompletion && (
-                        <button className={styles.payBtn} onClick={() => showPayModal(a)}><Upload size={14} /> Pay Now</button>
-                      )}
-                      {/* Pay after completion */}
+                      {/* Pay ONLY after completion and when unpaid */}
                       {needsPay && (
                         <button className={styles.payBtn} onClick={() => showPayModal(a)} style={{ background: '#d4af37', color: '#0f1422', fontWeight: 700 }}>
                           <Upload size={14} /> Pay Now
                         </button>
                       )}
-                      {/* Rate (only after paid) */}
                       {needsRate && (
                         <button className={styles.rateBtn} onClick={() => { setRatingModal(a); setRating({ barbershop_rating: 5, barber_rating: 5, comment: '' }); }}>
                           <Star size={14} /> Rate
@@ -215,7 +241,9 @@ export default function CustomerAppointments() {
                         <button className={styles.cancelBtn} onClick={() => cancelAppointment(a.id)}>Cancel</button>
                       )}
                       {a.rating_id && <span style={{ color: '#10b981', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={13} /> Rated</span>}
-                      <Link to={`/customer/queue/${a.barbershop_id}`} className={styles.queueBtn}>View Queue</Link>
+                      {['pending','confirmed','in_progress'].includes(a.status) && (
+                        <Link to={`/customer/queue/${a.barbershop_id}`} className={styles.queueBtn}>View Queue</Link>
+                      )}
                     </div>
                   </div>
                 );
