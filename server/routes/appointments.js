@@ -395,6 +395,57 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
     const result = await pool.query('UPDATE appointments SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id]);
     const appt = result.rows[0];
 
+    // Status-change notifications to customer
+    if (appt.customer_id && ['confirmed', 'in_progress', 'cancelled'].includes(status)) {
+      const shopRes = await pool.query('SELECT name FROM barbershops WHERE id=$1', [appt.barbershop_id]);
+      const shopName = shopRes.rows[0]?.name || 'the barbershop';
+
+      if (status === 'confirmed') {
+        await pool.query(
+          `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+           VALUES ('customer',$1,'✅ Appointment Confirmed',$2,'confirmed',$3)`,
+          [appt.customer_id, `Your appointment at ${shopName} is confirmed! We'll see you soon.`, req.params.id]
+        );
+      } else if (status === 'in_progress') {
+        await pool.query(
+          `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+           VALUES ('customer',$1,'✂️ Your Service Has Started',$2,'in_progress',$3)`,
+          [appt.customer_id, `Your appointment at ${shopName} has started — you're being served now!`, req.params.id]
+        );
+        // Notify the NEXT customer in queue: "You're next!"
+        const nextRes = await pool.query(
+          `SELECT a.id, a.customer_id, a.queue_number, s.name as service_name
+           FROM appointments a
+           LEFT JOIN services s ON s.id = a.service_id
+           WHERE a.barbershop_id = $1
+             AND a.appointment_date = $2
+             AND a.status IN ('pending','confirmed')
+             AND a.queue_number > $3
+           ORDER BY a.queue_number ASC
+           LIMIT 1`,
+          [appt.barbershop_id, appt.appointment_date, appt.queue_number]
+        );
+        if (nextRes.rows.length && nextRes.rows[0].customer_id) {
+          const next = nextRes.rows[0];
+          await pool.query(
+            `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+             VALUES ('customer',$1,'🔔 You\'re Next!',$2,'next_in_queue',$3)`,
+            [next.customer_id,
+             `You're next in line at ${shopName}! Get ready — your ${next.service_name || 'service'} is starting soon.`,
+             next.id]
+          );
+        }
+      } else if (status === 'cancelled') {
+        await pool.query(
+          `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+           VALUES ('customer',$1,'❌ Appointment Cancelled',$2,'cancelled',$3)`,
+          [appt.customer_id,
+           `Your appointment at ${shopName} has been cancelled. Please rebook or contact the shop for more info.`,
+           req.params.id]
+        );
+      }
+    }
+
     if (status === 'completed') {
       // Guard against double-awarding loyalty points
       if (appt.customer_id && !appt.loyalty_awarded) {

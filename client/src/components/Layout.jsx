@@ -50,7 +50,7 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
+    const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -93,6 +93,8 @@ export default function Layout({ children }) {
     loyalty: '#d4af37', new_booking: '#3b82f6', payment_proof: '#8b5cf6',
     payment_verified: '#10b981', subscription: '#10b981', no_show: '#ef4444',
     report_response: '#f59e0b', restriction: '#ef4444', service_complete: '#d4af37',
+    confirmed: '#10b981', in_progress: '#3b82f6', cancelled: '#ef4444',
+    next_in_queue: '#f59e0b',
   };
 
   const isActive = (to) => location.pathname === to;
