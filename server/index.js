@@ -12,12 +12,31 @@ const PORT = process.env.PORT || 3001;
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
+// Simple in-memory rate limiter (no external packages needed)
+const rateLimits = new Map();
+setInterval(() => rateLimits.clear(), 60 * 1000);
+
+function rateLimit(maxPerMinute) {
+  return (req, res, next) => {
+    const key = `${req.ip}:${req.path}`;
+    const count = (rateLimits.get(key) || 0) + 1;
+    rateLimits.set(key, count);
+    if (count > maxPerMinute) {
+      return res.status(429).json({ message: 'Too many requests. Please slow down.' });
+    }
+    next();
+  };
+}
+
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(uploadDir));
 
-app.use('/api/auth', require('./routes/auth'));
+// Rate-limited routes
+app.use('/api/auth', rateLimit(20), require('./routes/auth'));
+app.use('/api/subscriptions', rateLimit(30), require('./routes/subscriptions'));
+
 app.use('/api/barbershops', require('./routes/barbershops'));
 app.use('/api/barbers', require('./routes/barbers'));
 app.use('/api/services', require('./routes/services'));
@@ -31,11 +50,18 @@ app.use('/api/bans', require('./routes/bans'));
 app.use('/api/customer-ratings', require('./routes/customerRatings'));
 app.use('/api/loyalty-promos', require('./routes/loyaltyPromos'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/barber-ratings', require('./routes/barberRatings'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+
+// Global multer error handler
+app.use((err, req, res, next) => {
+  if (err && err.message && (err.message.includes('Only image') || err.code === 'LIMIT_FILE_SIZE')) {
+    return res.status(400).json({ message: err.message || 'File upload error' });
+  }
+  next(err);
+});
 
 async function runMigrations() {
   const migrations = [
@@ -47,6 +73,16 @@ async function runMigrations() {
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS appeal_text TEXT`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS appeal_status TEXT DEFAULT 'none'`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS restricted_at TIMESTAMP`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS loyalty_awarded BOOLEAN DEFAULT FALSE`,
+    `CREATE TABLE IF NOT EXISTS promo_redemptions (
+      id SERIAL PRIMARY KEY,
+      customer_id INTEGER NOT NULL,
+      promo_id INTEGER NOT NULL,
+      barbershop_id INTEGER NOT NULL,
+      points_spent INTEGER NOT NULL,
+      redemption_code TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
   ];
   for (const sql of migrations) {
     try { await pool.query(sql); } catch (err) { console.error('Migration error:', err.message); }

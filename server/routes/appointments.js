@@ -3,13 +3,74 @@ const router = express.Router();
 const pool = require('../db');
 const multer = require('multer');
 const path = require('path');
-const { authenticateCustomer, authenticateBarbershop, authenticateBarbershopOrBarber, authenticateBarber } = require('../middleware/auth');
+const { authenticateCustomer, authenticateBarbershop, authenticateBarbershopOrBarber } = require('../middleware/auth');
+
+const imageFileFilter = (req, file, cb) => {
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+  }
+};
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
   filename: (req, file, cb) => cb(null, `proof_${Date.now()}${path.extname(file.originalname)}`)
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+
+// PUBLIC: top services (for customer explore/dashboard)
+router.get('/top-services', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 8, 20);
+    const result = await pool.query(`
+      SELECT s.id, s.name, s.price, s.image_url, s.duration_minutes,
+        b.id as barbershop_id, b.name as barbershop_name,
+        COUNT(a.id)::int as booking_count
+      FROM services s
+      JOIN barbershops b ON b.id = s.barbershop_id
+      LEFT JOIN appointments a ON a.service_id = s.id AND a.status NOT IN ('cancelled','no_show')
+      WHERE s.is_active = true AND s.price IS NOT NULL
+        AND b.is_active = true AND b.subscription_status = 'active'
+      GROUP BY s.id, b.id
+      ORDER BY booking_count DESC, s.id DESC
+      LIMIT $1
+    `, [limit]);
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// CUSTOMER: upcoming appointment reminders (today and tomorrow)
+router.get('/reminders', authenticateCustomer, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT a.id, a.appointment_date, a.appointment_time, a.status,
+        b.name as barbershop_name, s.name as service_name
+      FROM appointments a
+      LEFT JOIN barbershops b ON b.id = a.barbershop_id
+      LEFT JOIN services s ON s.id = a.service_id
+      WHERE a.customer_id = $1
+        AND a.status IN ('pending','confirmed')
+        AND a.appointment_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + 1
+      ORDER BY a.appointment_date, a.appointment_time
+    `, [req.user.id]);
+    res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// PUBLIC: available (booked) time slots for a date
+router.get('/available-slots', async (req, res) => {
+  try {
+    const { barbershop_id, barber_id, date } = req.query;
+    if (!barbershop_id || !date) return res.status(400).json({ message: 'barbershop_id and date are required' });
+    let q = `SELECT appointment_time FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND status NOT IN ('cancelled','no_show')`;
+    const params = [barbershop_id, date];
+    if (barber_id) { params.push(barber_id); q += ` AND barber_id=$${params.length}`; }
+    const result = await pool.query(q, params);
+    const booked_slots = result.rows.map(r => r.appointment_time?.substring(0, 5)).filter(Boolean);
+    res.json({ booked_slots });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
 
 // CUSTOMER: book appointment
 router.post('/', authenticateCustomer, async (req, res) => {
@@ -18,11 +79,50 @@ router.post('/', authenticateCustomer, async (req, res) => {
     if (!barbershop_id || !service_id || !appointment_date || !appointment_time) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
+
+    // Validate date is not in the past
+    const today = new Date().toISOString().split('T')[0];
+    if (appointment_date < today) {
+      return res.status(400).json({ message: 'Cannot book an appointment in the past' });
+    }
+
+    // Check customer subscription — block if restricted
+    const custRow = await pool.query('SELECT subscription_status FROM customers WHERE id=$1', [req.user.id]);
+    if (custRow.rows[0]?.subscription_status === 'restricted') {
+      return res.status(403).json({ message: 'Your account is restricted. Please contact support.' });
+    }
+
+    // Check if customer is banned from this shop
     const banCheck = await pool.query(
       `SELECT id FROM customer_bans WHERE customer_id=$1 AND barbershop_id=$2 AND (banned_until IS NULL OR banned_until > NOW())`,
       [req.user.id, barbershop_id]
     );
     if (banCheck.rows.length) return res.status(403).json({ message: 'You are banned from this barbershop' });
+
+    // Validate barber belongs to this barbershop
+    if (barber_id) {
+      const barberCheck = await pool.query('SELECT id FROM barbers WHERE id=$1 AND barbershop_id=$2', [barber_id, barbershop_id]);
+      if (!barberCheck.rows.length) {
+        return res.status(400).json({ message: 'Selected barber does not belong to this barbershop' });
+      }
+    }
+
+    // Normalize time to HH:MM:SS
+    let normalizedTime = appointment_time;
+    if (/^\d{2}:\d{2}$/.test(appointment_time)) {
+      normalizedTime = appointment_time + ':00';
+    }
+
+    // Check time slot not already taken for this barber
+    if (barber_id) {
+      const slotCheck = await pool.query(
+        `SELECT id FROM appointments WHERE barbershop_id=$1 AND barber_id=$2 AND appointment_date=$3 AND appointment_time=$4 AND status NOT IN ('cancelled','no_show')`,
+        [barbershop_id, barber_id, appointment_date, normalizedTime]
+      );
+      if (slotCheck.rows.length) {
+        return res.status(400).json({ message: 'This time slot is already taken for the selected barber' });
+      }
+    }
 
     const serviceRes = await pool.query('SELECT price FROM services WHERE id=$1', [service_id]);
     if (!serviceRes.rows.length) return res.status(404).json({ message: 'Service not found' });
@@ -34,22 +134,35 @@ router.post('/', authenticateCustomer, async (req, res) => {
     );
 
     const result = await pool.query(
-      `INSERT INTO appointments (customer_id, barbershop_id, barber_id, service_id, appointment_date, appointment_time, is_home_service, home_address, notes, total_amount, queue_number, status, payment_status)
+      `INSERT INTO appointments (customer_id, barbershop_id, barber_id, service_id, appointment_date, appointment_time,
+         is_home_service, home_address, notes, total_amount, queue_number, status, payment_status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending','unpaid') RETURNING *`,
-      [req.user.id, barbershop_id, barber_id || null, service_id, appointment_date, appointment_time,
+      [req.user.id, barbershop_id, barber_id || null, service_id, appointment_date, normalizedTime,
        is_home_service || false, home_address || null, notes || null, total_amount, queueRes.rows[0].q]
     );
     const appt = result.rows[0];
 
+    // Notify barbershop
     await pool.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('barbershop',$1,'📅 New Appointment Booked',$2,'new_booking',$3)`,
+      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+       VALUES ('barbershop',$1,'📅 New Appointment Booked',$2,'new_booking',$3)`,
       [barbershop_id, `New ${is_home_service ? 'home service' : 'in-shop'} appointment booked for ${appointment_date} at ${appointment_time}`, appt.id]
     );
+
+    // Notify assigned barber
+    if (barber_id) {
+      await pool.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+         VALUES ('barber',$1,'📅 New Appointment Assigned',$2,'new_booking',$3)`,
+        [barber_id, `You have a new appointment on ${appointment_date} at ${appointment_time}`, appt.id]
+      );
+    }
+
     res.status(201).json(appt);
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// CUSTOMER: my appointments (active + recent completed needing payment/rating)
+// CUSTOMER: my appointments (all, ordered newest first)
 router.get('/my', authenticateCustomer, async (req, res) => {
   try {
     const result = await pool.query(`
@@ -87,7 +200,8 @@ router.get('/history', authenticateCustomer, async (req, res) => {
       LEFT JOIN barbers br ON br.id=a.barber_id
       LEFT JOIN ratings r ON r.appointment_id=a.id AND r.customer_id=a.customer_id
       LEFT JOIN barber_customer_ratings bcr ON bcr.appointment_id=a.id
-      LEFT JOIN loyalty_transactions lt ON lt.customer_id=a.customer_id AND lt.barbershop_id=a.barbershop_id AND lt.type='earned' AND lt.description LIKE '%'||a.id||'%'
+      LEFT JOIN loyalty_transactions lt ON lt.customer_id=a.customer_id AND lt.barbershop_id=a.barbershop_id
+        AND lt.type='earned' AND lt.description LIKE '%'||a.id||'%'
       WHERE a.customer_id=$1 AND a.status IN ('completed','cancelled','no_show')
       ORDER BY a.appointment_date DESC, a.appointment_time DESC
     `, [req.user.id]);
@@ -95,7 +209,7 @@ router.get('/history', authenticateCustomer, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// SHOP/BARBER: list appointments — includes walk-ins merged in as appointment_type='walk_in'
+// SHOP/BARBER: list appointments + walk-ins for a date
 router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
   try {
     const { date, status } = req.query;
@@ -103,7 +217,6 @@ router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
     const shopId = isBarber ? req.user.barbershop_id : req.user.id;
     const today = date || new Date().toISOString().split('T')[0];
 
-    // Regular appointments
     let query = `
       SELECT a.id, a.queue_number, a.status, a.payment_status, a.total_amount,
         a.appointment_date, a.appointment_time, a.notes, a.home_address,
@@ -127,7 +240,6 @@ router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
 
     const apptResult = await pool.query(query, params);
 
-    // Walk-ins for today
     let walkInQuery = `
       SELECT w.id, w.queue_number, w.status, w.customer_name, w.barber_id,
         s.name as service_name, s.price as service_price, br.name as barber_name,
@@ -142,12 +254,14 @@ router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
     `;
     const walkParams = [shopId, today];
     if (isBarber) { walkParams.push(req.user.id); walkInQuery += ` AND w.barber_id=$${walkParams.length}`; }
-    if (status) { walkParams.push(status); walkInQuery += ` AND w.status=$${walkParams.length}`; }
+    if (status) {
+      const walkStatus = status === 'completed' ? 'done' : status;
+      walkParams.push(walkStatus); walkInQuery += ` AND w.status=$${walkParams.length}`;
+    }
     walkInQuery += ' ORDER BY w.queue_number';
 
     const walkResult = await pool.query(walkInQuery, walkParams);
 
-    // Merge and return
     res.json({ appointments: apptResult.rows, walk_ins: walkResult.rows });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
@@ -182,7 +296,7 @@ router.get('/shop/history', authenticateBarbershopOrBarber, async (req, res) => 
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// SHOP: dashboard stats
+// SHOP: dashboard stats (legacy — kept for backward compat)
 router.get('/shop/stats', authenticateBarbershop, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -195,17 +309,19 @@ router.get('/shop/stats', authenticateBarbershop, async (req, res) => {
     ]);
     res.json({
       today_bookings: parseInt(todayRes.rows[0].count),
+      today_appointments: parseInt(todayRes.rows[0].count),
       today_revenue: parseFloat(todayRes.rows[0].revenue),
       total_bookings: parseInt(totalRes.rows[0].count),
       total_revenue: parseFloat(totalRes.rows[0].revenue),
       avg_rating: parseFloat(ratingRes.rows[0].avg),
       in_queue: parseInt(queueRes.rows[0].count),
+      queue_count: parseInt(queueRes.rows[0].count),
       weekly: weekRes.rows
     });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// CUSTOMER: cancel
+// CUSTOMER: cancel appointment
 router.patch('/:id/cancel', authenticateCustomer, async (req, res) => {
   try {
     const result = await pool.query(
@@ -240,22 +356,24 @@ router.post('/:id/payment-proof', authenticateCustomer, upload.single('proof'), 
 router.patch('/:id/verify-payment', authenticateBarbershop, async (req, res) => {
   try {
     const { approved } = req.body;
-    const status = approved === false ? 'unpaid' : 'paid';
+    const paymentStatus = approved === false ? 'unpaid' : 'paid';
     const result = await pool.query(
-      `UPDATE appointments SET payment_status=$1, status=CASE WHEN $1='paid' AND status='pending' THEN 'confirmed' ELSE status END
-       WHERE id=$2 AND barbershop_id=$3 RETURNING *`,
-      [status, req.params.id, req.user.id]
+      `UPDATE appointments
+       SET payment_status=$1,
+           status=CASE WHEN $2 AND status IN ('pending') THEN 'confirmed' ELSE status END
+       WHERE id=$3 AND barbershop_id=$4 RETURNING *`,
+      [paymentStatus, approved !== false, req.params.id, req.user.id]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     await pool.query(
       `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('customer',$1,$2,$3,'payment_verified',$4)`,
       [result.rows[0].customer_id,
-        status === 'paid' ? '✅ Payment Confirmed' : '❌ Payment Rejected',
-        status === 'paid' ? 'Your payment has been verified. Your appointment is confirmed!' : 'Your payment proof was rejected. Please upload a new screenshot.',
+        paymentStatus === 'paid' ? '✅ Payment Confirmed' : '❌ Payment Rejected',
+        paymentStatus === 'paid' ? 'Your payment has been verified. Your appointment is confirmed!' : 'Your payment proof was rejected. Please upload a new screenshot.',
         req.params.id]
     );
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
 // SHOP/BARBER: update appointment status
@@ -278,8 +396,8 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
     const appt = result.rows[0];
 
     if (status === 'completed') {
-      // 1. Award loyalty points
-      if (appt.customer_id) {
+      // Guard against double-awarding loyalty points
+      if (appt.customer_id && !appt.loyalty_awarded) {
         const shopSettings = await pool.query(
           'SELECT COALESCE(loyalty_points_per_appointment, 1) as pts, COALESCE(loyalty_streak_bonus, 0) as bonus, COALESCE(loyalty_streak_every, 5) as streak_every FROM barbershops WHERE id=$1',
           [appt.barbershop_id]
@@ -289,7 +407,6 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
         const streakBonus = parseInt(bonus || 0);
         const streakEvery = parseInt(streak_every || 5);
 
-        // Count completed appointments at this shop for streak
         const countRes = await pool.query(
           `SELECT COUNT(*) as cnt FROM appointments WHERE customer_id=$1 AND barbershop_id=$2 AND status='completed'`,
           [appt.customer_id, appt.barbershop_id]
@@ -307,9 +424,11 @@ router.patch('/:id/status', authenticateBarbershopOrBarber, async (req, res) => 
           `INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,$3,'earned',$4)`,
           [appt.customer_id, appt.barbershop_id, totalPoints, `Completed appointment #${req.params.id}${isStreakVisit ? ` (includes +${streakBonus} streak bonus!)` : ''}`]
         );
+        // Mark loyalty as awarded to prevent double-awarding
+        await pool.query('UPDATE appointments SET loyalty_awarded=true WHERE id=$1', [req.params.id]);
       }
 
-      // 2. Notify customer: service complete, please pay + rate
+      // Notify customer
       if (appt.customer_id) {
         const shopRes = await pool.query('SELECT name FROM barbershops WHERE id=$1', [appt.barbershop_id]);
         const shopName = shopRes.rows[0]?.name || 'your barbershop';

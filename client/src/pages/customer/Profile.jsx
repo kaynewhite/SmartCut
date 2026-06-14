@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon } from 'lucide-react';
+import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon, Lock, Camera } from 'lucide-react';
 
 const TAB_LIST = ['profile', 'loyalty', 'subscription', 'reports'];
 
@@ -20,6 +20,11 @@ export default function CustomerProfile() {
   const [reports, setReports] = useState([]);
   const [reportForm, setReportForm] = useState({ report_type: 'feedback', subject: '', message: '' });
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || null);
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const avatarInputRef = useRef();
 
   useEffect(() => {
     api.get('/customers/me/loyalty').then(res => setLoyalty(res.data)).catch(() => {});
@@ -37,6 +42,33 @@ export default function CustomerProfile() {
       toast.success('Profile updated!');
     } catch { toast.error('Update failed'); }
     finally { setSaving(false); }
+  };
+
+  const handleAvatarUpload = async (file) => {
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('avatar', file);
+      const res = await api.post('/customers/me/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setAvatarUrl(res.data.avatar_url);
+      updateUser({ ...user, avatar_url: res.data.avatar_url });
+      toast.success('Avatar updated!');
+    } catch (err) { toast.error(err.response?.data?.message || 'Upload failed'); }
+    finally { setAvatarUploading(false); }
+  };
+
+  const handlePwChange = async (e) => {
+    e.preventDefault();
+    if (pwForm.new_password !== pwForm.confirm_password) return toast.error('New passwords do not match');
+    if (pwForm.new_password.length < 6) return toast.error('New password must be at least 6 characters');
+    setPwSaving(true);
+    try {
+      await api.put('/customers/me/password', { current_password: pwForm.current_password, new_password: pwForm.new_password });
+      toast.success('Password changed successfully!');
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' });
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to change password'); }
+    finally { setPwSaving(false); }
   };
 
   const handleSubRequest = async (e) => {
@@ -88,8 +120,18 @@ export default function CustomerProfile() {
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 16px' }}>
         {/* Profile header */}
         <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 14, padding: 24, marginBottom: 20, textAlign: 'center' }}>
-          <div style={{ width: 68, height: 68, borderRadius: '50%', background: 'rgba(212,175,55,0.15)', border: '2px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 28, color: '#d4af37', fontWeight: 700 }}>
-            {user?.name?.charAt(0)?.toUpperCase()}
+          <div style={{ position: 'relative', width: 68, height: 68, margin: '0 auto 12px', cursor: 'pointer' }} onClick={() => avatarInputRef.current?.click()}>
+            {avatarUrl || user?.avatar_url ? (
+              <img src={avatarUrl || user?.avatar_url} alt="Avatar" style={{ width: 68, height: 68, borderRadius: '50%', objectFit: 'cover', border: '2px solid #d4af37' }} />
+            ) : (
+              <div style={{ width: 68, height: 68, borderRadius: '50%', background: 'rgba(212,175,55,0.15)', border: '2px solid #d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: '#d4af37', fontWeight: 700 }}>
+                {user?.name?.charAt(0)?.toUpperCase()}
+              </div>
+            )}
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: 22, height: 22, borderRadius: '50%', background: '#d4af37', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f1827' }}>
+              {avatarUploading ? <span style={{ fontSize: 10, color: '#0f1422' }}>…</span> : <Camera size={11} color="#0f1422" />}
+            </div>
+            <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarUpload(e.target.files[0])} />
           </div>
           <div style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 18 }}>{user?.name}</div>
           <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>{user?.email}</div>
@@ -124,21 +166,47 @@ export default function CustomerProfile() {
         </div>
 
         {tab === 'profile' && (
-          <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
-            <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 18 }}>Edit Profile</h2>
-            <form onSubmit={handleSave}>
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Full Name</label>
-                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
-              </div>
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Phone</label>
-                <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="09XX XXX XXXX" style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
-              </div>
-              <button type="submit" disabled={saving} style={{ width: '100%', padding: '12px', background: saving ? '#374151' : '#d4af37', color: saving ? '#8b92a9' : '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 15 }}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </form>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
+              <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 18 }}>Edit Profile</h2>
+              <form onSubmit={handleSave}>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Full Name</label>
+                  <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Phone</label>
+                  <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="09XX XXX XXXX" style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <button type="submit" disabled={saving} style={{ width: '100%', padding: '12px', background: saving ? '#374151' : '#d4af37', color: saving ? '#8b92a9' : '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 15 }}>
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </form>
+            </div>
+
+            <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
+              <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Lock size={16} color="#d4af37" /> Change Password
+              </h2>
+              <p style={{ color: '#8b92a9', fontSize: 13, marginBottom: 18 }}>Leave these blank if you don't want to change your password.</p>
+              <form onSubmit={handlePwChange}>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Current Password</label>
+                  <input type="password" value={pwForm.current_password} onChange={e => setPwForm(p => ({ ...p, current_password: e.target.value }))} required style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>New Password</label>
+                  <input type="password" value={pwForm.new_password} onChange={e => setPwForm(p => ({ ...p, new_password: e.target.value }))} required minLength={6} style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Confirm New Password</label>
+                  <input type="password" value={pwForm.confirm_password} onChange={e => setPwForm(p => ({ ...p, confirm_password: e.target.value }))} required style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '11px 13px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <button type="submit" disabled={pwSaving} style={{ width: '100%', padding: '12px', background: pwSaving ? '#374151' : '#1e2a3a', color: pwSaving ? '#8b92a9' : '#f0f0f0', border: '1px solid #2d3748', borderRadius: 8, fontWeight: 600, cursor: pwSaving ? 'not-allowed' : 'pointer', fontSize: 15 }}>
+                  {pwSaving ? 'Updating...' : 'Update Password'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
 

@@ -5,16 +5,24 @@ const multer = require('multer');
 const path = require('path');
 const { authenticateAdmin } = require('../middleware/auth');
 
+const imageFileFilter = (req, file, cb) => {
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+  }
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
   filename: (req, file, cb) => cb(null, `admin_${Date.now()}${path.extname(file.originalname)}`)
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 // ADMIN: dashboard stats
 router.get('/dashboard', authenticateAdmin, async (req, res) => {
   try {
-    const [shops, customers, appts, pendingSubs, openReports, todayAppts, activeSubs, shopSubs, custSubs] = await Promise.all([
+    const [shops, customers, appts, pendingSubs, openReports, todayAppts, activeSubs, shopSubs, custSubs, revenueRes, monthlyRevenueRes] = await Promise.all([
       pool.query('SELECT COUNT(*) as count FROM barbershops'),
       pool.query('SELECT COUNT(*) as count FROM customers'),
       pool.query('SELECT COUNT(*) as count FROM appointments'),
@@ -24,6 +32,14 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'active'"),
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'barbershop' AND status = 'active'"),
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'customer' AND status = 'active'"),
+      pool.query("SELECT COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as total FROM appointments"),
+      pool.query(`SELECT TO_CHAR(DATE_TRUNC('month', appointment_date), 'Mon YYYY') as month,
+        DATE_TRUNC('month', appointment_date) as month_start,
+        COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as revenue,
+        COUNT(*)::int as bookings
+        FROM appointments
+        WHERE appointment_date >= CURRENT_DATE - INTERVAL '6 months'
+        GROUP BY month, month_start ORDER BY month_start`)
     ]);
     const recentShops = await pool.query(`
       SELECT b.id, b.name, b.email, b.city, b.created_at, b.subscription_status,
@@ -41,7 +57,9 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
         active_subscriptions: parseInt(activeSubs.rows[0].count),
         active_shop_subs: parseInt(shopSubs.rows[0].count),
         active_customer_subs: parseInt(custSubs.rows[0].count),
+        total_revenue: parseFloat(revenueRes.rows[0].total),
       },
+      monthly_revenue: monthlyRevenueRes.rows,
       recent_shops: recentShops.rows
     });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
@@ -229,7 +247,7 @@ router.put('/me/password', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: restrict barbershop — requires reason, prevents operation, barbershop must appeal
+// ADMIN: restrict barbershop
 router.patch('/barbershops/:id/restrict', authenticateAdmin, async (req, res) => {
   try {
     const { reason, requirements } = req.body;
@@ -238,21 +256,16 @@ router.patch('/barbershops/:id/restrict', authenticateAdmin, async (req, res) =>
     const shop = current.rows[0];
 
     if (shop.is_active) {
-      // Restricting: require a reason
       if (!reason || !reason.trim()) return res.status(400).json({ message: 'A reason is required to restrict a barbershop' });
       await pool.query(
         `UPDATE barbershops SET is_active=false, restriction_reason=$1, restriction_requirements=$2, appeal_status='none', restricted_at=NOW() WHERE id=$3`,
         [reason.trim(), requirements?.trim() || null, req.params.id]
       );
-      // Notify owner
       await pool.query(
         `INSERT INTO notifications (recipient_type, recipient_id, title, message, type) VALUES ('barbershop',$1,$2,$3,'restriction')`,
-        [req.params.id,
-          '⚠️ Your Shop Has Been Restricted',
-          `Your barbershop has been restricted and is no longer visible to customers.\n\nReason: ${reason}${requirements ? `\n\nRequirements to lift restriction: ${requirements}` : ''}\n\nYou may submit an appeal from your Settings page.`
-        ]
+        [req.params.id, '⚠️ Your Shop Has Been Restricted',
+          `Your barbershop has been restricted and is no longer visible to customers.\n\nReason: ${reason}${requirements ? `\n\nRequirements to lift restriction: ${requirements}` : ''}\n\nYou may submit an appeal from your Settings page.`]
       );
-      // Notify all barbers
       const barbers = await pool.query('SELECT id FROM barbers WHERE barbershop_id=$1', [req.params.id]);
       for (const b of barbers.rows) {
         await pool.query(
@@ -262,7 +275,6 @@ router.patch('/barbershops/:id/restrict', authenticateAdmin, async (req, res) =>
       }
       res.json({ ok: true, is_active: false, name: shop.name });
     } else {
-      // Unrestricting (lifting restriction)
       await pool.query(
         `UPDATE barbershops SET is_active=true, restriction_reason=NULL, restriction_requirements=NULL, appeal_status='none', restricted_at=NULL WHERE id=$1`,
         [req.params.id]
@@ -276,7 +288,7 @@ router.patch('/barbershops/:id/restrict', authenticateAdmin, async (req, res) =>
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: view appeals
+// ADMIN: view appeals (must be before /:id routes)
 router.get('/barbershops/appeals', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(
@@ -287,7 +299,7 @@ router.get('/barbershops/appeals', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: resolve appeal (approve = lift restriction, reject = keep restricted)
+// ADMIN: resolve appeal
 router.patch('/barbershops/:id/appeal', authenticateAdmin, async (req, res) => {
   try {
     const { action, admin_note } = req.body;
@@ -313,14 +325,12 @@ router.patch('/barbershops/:id/appeal', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// ADMIN: delete barbershop — cascade everything, notify owner and barbers first
+// ADMIN: delete barbershop
 router.delete('/barbershops/:id', authenticateAdmin, async (req, res) => {
   try {
     const existing = await pool.query('SELECT id, name FROM barbershops WHERE id=$1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
     const shop = existing.rows[0];
-
-    // Notify all barbers
     const barbers = await pool.query('SELECT id FROM barbers WHERE barbershop_id=$1', [req.params.id]);
     for (const b of barbers.rows) {
       await pool.query(
@@ -328,8 +338,6 @@ router.delete('/barbershops/:id', authenticateAdmin, async (req, res) => {
         [b.id, `The barbershop "${shop.name}" has been permanently deleted by an admin. Your barber account is no longer active.`]
       );
     }
-
-    // Delete the barbershop (ON DELETE CASCADE handles barbers, services, loyalty, appointments, etc.)
     await pool.query('DELETE FROM barbershops WHERE id=$1', [req.params.id]);
     res.json({ ok: true, name: shop.name });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }

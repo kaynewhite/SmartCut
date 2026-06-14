@@ -6,8 +6,8 @@ import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle, UserX, Star, Ban 
 import styles from './Appointments.module.css';
 
 const STATUS_OPTS = ['pending','confirmed','in_progress','completed','cancelled','no_show'];
-const STATUS_COLOR = { pending:'warning', confirmed:'success', in_progress:'info', completed:'success', cancelled:'error', no_show:'error' };
-const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled', no_show:'No Show' };
+const STATUS_COLOR = { pending:'warning', confirmed:'success', in_progress:'info', completed:'success', cancelled:'error', no_show:'error', done:'success' };
+const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled', no_show:'No Show', done:'Done' };
 
 export default function BarbershopAppointments() {
   const [appointments, setAppointments] = useState([]);

@@ -4,13 +4,10 @@ const pool = require('../db');
 const { authenticateBarbershopOrBarber } = require('../middleware/auth');
 
 // PUBLIC: live queue for a shop
-// Returns appointments and walk-ins each with a dynamic `position` field
-// (gaps from cancellations are removed — position 1 = first in line right now)
 router.get('/:barbershopId', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
 
-    // Appointment queue — include customer name (masked for public, needed for staff)
     const apptRes = await pool.query(`
       SELECT a.id, a.queue_number, a.status, a.appointment_time, a.customer_id,
         c.name as customer_name,
@@ -26,7 +23,6 @@ router.get('/:barbershopId', async (req, res) => {
       ORDER BY a.queue_number
     `, [req.params.barbershopId, today]);
 
-    // Walk-in queue
     const walkInRes = await pool.query(`
       SELECT w.id, w.queue_number, w.status, w.customer_name, w.barber_id,
         s.name as service_name, COALESCE(s.duration_minutes, 20) as duration_minutes,
@@ -40,17 +36,8 @@ router.get('/:barbershopId', async (req, res) => {
       ORDER BY w.queue_number
     `, [req.params.barbershopId, today]);
 
-    // Assign dynamic positions (1-based rank in the active queue, gaps removed)
-    const appointments = apptRes.rows.map((a, index) => ({
-      ...a,
-      // Mask customer name for non-staff (customer sees their own name, others see "Customer #N")
-      position: index + 1,
-    }));
-
-    const walk_ins = walkInRes.rows.map((w, index) => ({
-      ...w,
-      position: index + 1,
-    }));
+    const appointments = apptRes.rows.map((a, index) => ({ ...a, position: index + 1 }));
+    const walk_ins = walkInRes.rows.map((w, index) => ({ ...w, position: index + 1 }));
 
     res.json({ appointments, walk_ins });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
@@ -70,16 +57,20 @@ router.get('/:barbershopId/schedule', async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// AUTH: add walk-in
+// AUTH: add walk-in (race-condition safe with advisory lock)
 router.post('/', authenticateBarbershopOrBarber, async (req, res) => {
+  const client = await pool.connect();
   try {
     const { customer_name, service_id, barber_id } = req.body;
     if (!customer_name) return res.status(400).json({ message: 'Customer name required' });
     const shopId = req.user.type === 'barber' ? req.user.barbershop_id : req.user.id;
     const today = new Date().toISOString().split('T')[0];
 
-    // Unified queue number: max of both walk_ins AND appointments for today to avoid duplicate numbers
-    const lastQ = await pool.query(
+    await client.query('BEGIN');
+    // Advisory lock per shop to prevent race condition on queue number
+    await client.query('SELECT pg_advisory_xact_lock($1)', [parseInt(shopId)]);
+
+    const lastQ = await client.query(
       `SELECT GREATEST(
         COALESCE((SELECT MAX(queue_number) FROM walk_ins WHERE barbershop_id=$1 AND DATE(created_at)=$2), 0),
         COALESCE((SELECT MAX(queue_number) FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2), 0)
@@ -87,12 +78,17 @@ router.post('/', authenticateBarbershopOrBarber, async (req, res) => {
       [shopId, today]
     );
     const assignedBarber = barber_id || (req.user.type === 'barber' ? req.user.id : null);
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO walk_ins (barbershop_id, customer_name, service_id, barber_id, queue_number) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [shopId, customer_name, service_id || null, assignedBarber, lastQ.rows[0].q]
     );
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  } finally { client.release(); }
 });
 
 // AUTH: update walk-in status

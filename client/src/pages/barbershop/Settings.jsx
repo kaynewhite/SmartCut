@@ -3,7 +3,7 @@ import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import Map, { SINILOAN_CENTER, DEFAULT_ZOOM } from '../../components/Map';
 import toast from 'react-hot-toast';
-import { Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight, MapPin, CreditCard, CheckCircle, Clock, MessageSquare, Gift, ShieldAlert, AlertTriangle, Send } from 'lucide-react';
+import { Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight, MapPin, CreditCard, CheckCircle, Clock, MessageSquare, Gift, ShieldAlert, AlertTriangle, Send, Lock } from 'lucide-react';
 import styles from './Settings.module.css';
 
 const PH_PAYMENT_TYPES = [
@@ -46,6 +46,9 @@ export default function BarbershopSettings() {
   // Appeal
   const [appealText, setAppealText] = useState('');
   const [submittingAppeal, setSubmittingAppeal] = useState(false);
+  // Password change
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     fetchShop();
@@ -171,6 +174,19 @@ export default function BarbershopSettings() {
       fetchShop();
     } catch (err) { toast.error(err.response?.data?.message || 'Failed to submit appeal'); }
     finally { setSubmittingAppeal(false); }
+  };
+
+  const handlePwChange = async (e) => {
+    e.preventDefault();
+    if (pwForm.new_password !== pwForm.confirm_password) return toast.error('New passwords do not match');
+    if (pwForm.new_password.length < 6) return toast.error('New password must be at least 6 characters');
+    setPwSaving(true);
+    try {
+      await api.put('/barbershops/me/password', { current_password: pwForm.current_password, new_password: pwForm.new_password });
+      toast.success('Password changed successfully!');
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' });
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to change password'); }
+    finally { setPwSaving(false); }
   };
 
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
@@ -431,6 +447,27 @@ export default function BarbershopSettings() {
                 {shop?.logo_url ? <img src={shop.logo_url} alt="Logo" className={styles.logoPreview} /> : <div className={styles.uploadPlaceholder}><Image size={40} color="#4b5563" /><span>No logo</span></div>}
                 <label className={styles.uploadBtn}><Upload size={14} /> {shop?.logo_url ? 'Update Logo' : 'Upload Logo'}<input type="file" accept="image/*" onChange={e => uploadLogo(e.target.files[0])} style={{ display: 'none' }} /></label>
               </div>
+            </div>
+
+            <div className={styles.section}>
+              <h2><Lock size={18} /> Change Password</h2>
+              <form onSubmit={handlePwChange} className={styles.form}>
+                <div className={styles.field}>
+                  <label>Current Password</label>
+                  <input className={styles.input} type="password" value={pwForm.current_password} onChange={e => setPwForm(p => ({ ...p, current_password: e.target.value }))} required />
+                </div>
+                <div className={styles.field}>
+                  <label>New Password</label>
+                  <input className={styles.input} type="password" value={pwForm.new_password} onChange={e => setPwForm(p => ({ ...p, new_password: e.target.value }))} required minLength={6} />
+                </div>
+                <div className={styles.field}>
+                  <label>Confirm New Password</label>
+                  <input className={styles.input} type="password" value={pwForm.confirm_password} onChange={e => setPwForm(p => ({ ...p, confirm_password: e.target.value }))} required />
+                </div>
+                <button className={styles.saveBtn} type="submit" disabled={pwSaving} style={{ background: pwSaving ? '#374151' : '#1e2a3a', color: pwSaving ? '#6b7280' : '#f0f0f0' }}>
+                  {pwSaving ? 'Updating...' : 'Update Password'}
+                </button>
+              </form>
             </div>
           </div>
         </div>
