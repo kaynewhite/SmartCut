@@ -17,6 +17,12 @@ export default function Layout({ children }) {
   const [flash, setFlash] = useState(null);
   const prevIdsRef = useRef(new Set());
 
+  // Always-fresh refs so interval callbacks never use stale closures
+  const userRef = useRef(user);
+  const updateUserRef = useRef(updateUser);
+  userRef.current = user;
+  updateUserRef.current = updateUser;
+
   const isShop = user?.type === 'barbershop';
   const isBarber = user?.type === 'barber';
 
@@ -49,31 +55,6 @@ export default function Layout({ children }) {
 
   const links = isShop ? shopLinks : isBarber ? barberLinks : customerLinks;
 
-  // Sync subscription status from DB into localStorage/context so expiry is reflected without re-login
-  const syncSubscriptionStatus = async () => {
-    if (!user || !['customer', 'barbershop'].includes(user.type)) return;
-    try {
-      const res = await api.get('/subscriptions/status');
-      const liveActive = res.data?.is_active === true;
-      const localActive = user.subscription_status === 'active';
-      if (liveActive !== localActive) {
-        const newStatus = liveActive ? 'active' : 'inactive';
-        updateUser({ subscription_status: newStatus });
-        if (!liveActive && localActive) {
-          toast('Your subscription has expired. Please renew to continue.', { icon: '⏰', duration: 6000 });
-        }
-      }
-    } catch {}
-  };
-
-  useEffect(() => {
-    fetchNotifications();
-    syncSubscriptionStatus();
-    const interval = setInterval(fetchNotifications, 15000);
-    const subInterval = setInterval(syncSubscriptionStatus, 5 * 60 * 1000); // sync every 5 min
-    return () => { clearInterval(interval); clearInterval(subInterval); };
-  }, []);
-
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications');
@@ -90,6 +71,33 @@ export default function Layout({ children }) {
       setUnread(newUnread);
     } catch {}
   };
+
+  // Sync subscription status from DB into localStorage/context so expiry is reflected without re-login.
+  // Uses refs so the interval never closes over stale user/updateUser values.
+  const syncSubscriptionStatus = async () => {
+    const currentUser = userRef.current;
+    if (!currentUser || !['customer', 'barbershop'].includes(currentUser.type)) return;
+    try {
+      const res = await api.get('/subscriptions/status');
+      const liveActive = res.data?.is_active === true;
+      const localActive = currentUser.subscription_status === 'active';
+      if (liveActive !== localActive) {
+        const newStatus = liveActive ? 'active' : 'inactive';
+        updateUserRef.current({ subscription_status: newStatus });
+        if (!liveActive && localActive) {
+          toast('Your subscription has expired. Please renew to continue.', { icon: '⏰', duration: 6000 });
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    syncSubscriptionStatus();
+    const interval = setInterval(fetchNotifications, 15000);
+    const subInterval = setInterval(syncSubscriptionStatus, 5 * 60 * 1000); // sync every 5 min
+    return () => { clearInterval(interval); clearInterval(subInterval); };
+  }, []);
 
   const markRead = async (id) => {
     try {
