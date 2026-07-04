@@ -167,27 +167,25 @@ router.put('/me/loyalty-settings', authenticateBarbershop, async (req, res) => {
 router.put('/me/solo-mode', authenticateBarbershop, async (req, res) => {
   try {
     const { enabled } = req.body;
-    const shopRes = await pool.query('SELECT is_solo FROM barbershops WHERE id = $1', [req.user.id]);
+    const shopRes = await pool.query('SELECT is_solo, solo_barber_id FROM barbershops WHERE id = $1', [req.user.id]);
     if (!shopRes.rows.length) return res.status(404).json({ message: 'Not found' });
     const shop = shopRes.rows[0];
 
     if (enabled) {
       if (shop.is_solo) return res.json({ ok: true, is_solo: true });
-      const barbersRes = await pool.query('SELECT id FROM barbers WHERE barbershop_id = $1 ORDER BY id', [req.user.id]);
-      if (barbersRes.rows.length > 1) {
-        return res.status(400).json({ message: 'Solo Operator Mode requires a single barber. Remove extra barbers first.' });
-      }
-      if (barbersRes.rows.length === 0) {
-        const shopInfo = await pool.query('SELECT name, phone, logo_url FROM barbershops WHERE id = $1', [req.user.id]);
-        const { name, phone, logo_url } = shopInfo.rows[0];
-        await pool.query(
-          'INSERT INTO barbers (barbershop_id, name, phone, photo_url, is_available) VALUES ($1,$2,$3,$4,true)',
-          [req.user.id, name, phone || null, logo_url || null]
-        );
-      }
-      await pool.query('UPDATE barbershops SET is_solo = true WHERE id = $1', [req.user.id]);
+      // Always create a fresh operator record for the owner, regardless of
+      // how many barbers already exist on file — those remain untouched.
+      const shopInfo = await pool.query('SELECT name, phone, logo_url FROM barbershops WHERE id = $1', [req.user.id]);
+      const { name, phone, logo_url } = shopInfo.rows[0];
+      const inserted = await pool.query(
+        'INSERT INTO barbers (barbershop_id, name, phone, photo_url, is_available) VALUES ($1,$2,$3,$4,true) RETURNING id',
+        [req.user.id, name, phone || null, logo_url || null]
+      );
+      await pool.query('UPDATE barbershops SET is_solo = true, solo_barber_id = $2 WHERE id = $1', [req.user.id, inserted.rows[0].id]);
     } else {
-      await pool.query('UPDATE barbershops SET is_solo = false WHERE id = $1', [req.user.id]);
+      // Keep the operator's barber record on file (it simply becomes a
+      // regular entry in the shop's barber list) and just turn off solo mode.
+      await pool.query('UPDATE barbershops SET is_solo = false, solo_barber_id = NULL WHERE id = $1', [req.user.id]);
     }
 
     const result = await pool.query('SELECT * FROM barbershops WHERE id = $1', [req.user.id]);

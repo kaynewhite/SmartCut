@@ -9,11 +9,11 @@ async function resolveActingBarberId(req) {
   if (req.user.type === 'barber') return req.user.id;
 
   if (req.user.type === 'barbershop') {
-    const shopRes = await pool.query('SELECT is_solo FROM barbershops WHERE id = $1', [req.user.id]);
-    if (!shopRes.rows.length || !shopRes.rows[0].is_solo) {
+    const shopRes = await pool.query('SELECT is_solo, solo_barber_id FROM barbershops WHERE id = $1', [req.user.id]);
+    if (!shopRes.rows.length || !shopRes.rows[0].is_solo || !shopRes.rows[0].solo_barber_id) {
       throw { status: 403, message: 'Enable Solo Operator Mode in Settings to use this feature.' };
     }
-    const barberRes = await pool.query('SELECT id FROM barbers WHERE barbershop_id = $1 ORDER BY id LIMIT 1', [req.user.id]);
+    const barberRes = await pool.query('SELECT id FROM barbers WHERE id = $1 AND barbershop_id = $2', [shopRes.rows[0].solo_barber_id, req.user.id]);
     if (!barberRes.rows.length) {
       throw { status: 404, message: 'Operator profile not found' };
     }

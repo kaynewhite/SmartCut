@@ -207,6 +207,12 @@ export default function BarbershopSettings() {
   };
 
   const handleToggleSolo = async (enabled) => {
+    const confirmMessage = enabled
+      ? 'Enable Solo Operator Mode?\n\nThis will create a dedicated barber profile for you as the shop\'s sole operator, and you will manage your own services, availability, and reviews directly from this account — no separate barber login required. While enabled, you will not be able to add additional barbers. Any existing barbers on file will remain untouched.\n\nDo you want to continue?'
+      : 'Disable Solo Operator Mode?\n\nYour operator barber profile will remain saved as a regular entry in your Barbers list. You will need to manage barbers separately from the Barbers page going forward.\n\nDo you want to continue?';
+
+    if (!window.confirm(confirmMessage)) return;
+
     setSavingSolo(true);
     try {
       const res = await api.put('/barbershops/me/solo-mode', { enabled });
@@ -366,7 +372,7 @@ export default function BarbershopSettings() {
                       Your shop account gets its own barber profile, services, availability, and reviews, with no separate barber login to manage.
                     </p>
                     {!user?.is_solo && (
-                      <p style={{ color: '#6b7280', fontSize: 12, margin: 0 }}>You can only enable this if your shop has no more than one barber on record.</p>
+                      <p style={{ color: '#6b7280', fontSize: 12, margin: 0 }}>Enabling this creates a fresh operator profile for you. Any barbers already on file are kept as-is and won't be affected.</p>
                     )}
                     {user?.is_solo && (
                       <p style={{ color: '#16a34a', fontSize: 12, margin: 0 }}>Solo Operator Mode is active. Manage your barber profile & services from the sidebar links that now point to "My Barber Profile" and "My Services".</p>

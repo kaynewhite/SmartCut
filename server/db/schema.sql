@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS barbershops (
   subscription_status TEXT DEFAULT 'inactive',
   rating NUMERIC(3,2) DEFAULT 5.0,
   is_solo BOOLEAN DEFAULT false,
+  solo_barber_id INTEGER,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
