@@ -8,12 +8,12 @@ npm run dev          # Starts both server (port 3001) and client (port 5000) via
 npm run dev:server   # Server only (nodemon)
 npm run dev:client   # Client only (vite)
 ```
-Required env vars: `DATABASE_URL`, `JWT_SECRET` (Replit secrets). Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD` (defaults: `admin@smartcut.com` / `Admin@SmartCut2024`).
+Required env vars: `NEON_DATABASE_URL`, `JWT_SECRET` (Replit secrets). Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD` (defaults: `admin@smartcut.com` / `Admin@SmartCut2024`).
 
 ## Stack
 - **Frontend**: React 18, Vite 5, React Router 6, Axios, Recharts, React-Leaflet, Lucide React
 - **Backend**: Node.js, Express 4, pg (PostgreSQL client), bcryptjs, jsonwebtoken, multer
-- **Database**: PostgreSQL (Replit managed — `DATABASE_URL` secret)
+- **Database**: PostgreSQL hosted on Neon (external) — `NEON_DATABASE_URL` secret; `server/db/index.js` falls back to `DATABASE_URL` if `NEON_DATABASE_URL` is absent
 - **Dev tooling**: concurrently, nodemon
 
 ## Where things live
@@ -27,7 +27,7 @@ Required env vars: `DATABASE_URL`, `JWT_SECRET` (Replit secrets). Optional: `ADM
 - `client/vite.config.js` — proxies `/api` and `/uploads` → port 3001
 - `server/routes/` — auth, barbershops, barbers, services, appointments, queue, ratings, notifications, customers, paymentMethods, bans, customerRatings, loyaltyPromos, **admin**, **subscriptions**, **reports**, **barberRatings**
 - `server/middleware/auth.js` — JWT middleware (authenticate, authenticateCustomer, authenticateBarbershop, authenticateBarber, authenticateAdmin, authenticateBarbershopOrBarber)
-- `server/db/index.js` — pg Pool connected to DATABASE_URL
+- `server/db/index.js` — pg Pool connected to NEON_DATABASE_URL (Neon, SSL enabled); falls back to DATABASE_URL if unset
 - `server/db/schema.sql` — full DB schema (source of truth, 20 tables)
 - `server/uploads/` — multer file storage (QR codes, logos, photos, payment proofs, service images)
 
@@ -52,12 +52,13 @@ Required env vars: `DATABASE_URL`, `JWT_SECRET` (Replit secrets). Optional: `ADM
 ## User preferences
 - Admin credentials: `admin@smartcut.com` / `Admin@SmartCut2024` (seeded automatically)
 - Subscription model: both barbershops and customers must subscribe (30-day approval cycle)
-- T012 (Neon DB + Clerk auth) is pending — user needs to provide credentials
+- Database: user prefers the external Neon Postgres database over Replit's built-in database (holds pre-existing production data)
 
 ## Gotchas
 - `pg` must be installed inside `server/node_modules` — run `cd server && npm install pg` if missing
 - Schema applied via `server/db/schema.sql` — also includes migration-safe `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` guards
 - `JWT_SECRET` must be set as a Replit secret for auth to work
+- DB is Neon, not Replit-managed: `NEON_DATABASE_URL` secret, `channel_binding` param stripped in `server/db/index.js` (unsupported by node-postgres), SSL forced with `rejectUnauthorized: false`
 - `input[type=number]` and all inputs use `font-size: 16px` to prevent iOS auto-zoom
 - React Router v6 future-flag warnings are cosmetic and do not affect functionality
 - `leaflet/dist/leaflet.css` imported globally in `client/src/main.jsx`
