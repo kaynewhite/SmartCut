@@ -163,6 +163,39 @@ router.put('/me/loyalty-settings', authenticateBarbershop, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH: enable/disable Solo Operator Mode
+router.put('/me/solo-mode', authenticateBarbershop, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const shopRes = await pool.query('SELECT is_solo FROM barbershops WHERE id = $1', [req.user.id]);
+    if (!shopRes.rows.length) return res.status(404).json({ message: 'Not found' });
+    const shop = shopRes.rows[0];
+
+    if (enabled) {
+      if (shop.is_solo) return res.json({ ok: true, is_solo: true });
+      const barbersRes = await pool.query('SELECT id FROM barbers WHERE barbershop_id = $1 ORDER BY id', [req.user.id]);
+      if (barbersRes.rows.length > 1) {
+        return res.status(400).json({ message: 'Solo Operator Mode requires a single barber. Remove extra barbers first.' });
+      }
+      if (barbersRes.rows.length === 0) {
+        const shopInfo = await pool.query('SELECT name, phone, logo_url FROM barbershops WHERE id = $1', [req.user.id]);
+        const { name, phone, logo_url } = shopInfo.rows[0];
+        await pool.query(
+          'INSERT INTO barbers (barbershop_id, name, phone, photo_url, is_available) VALUES ($1,$2,$3,$4,true)',
+          [req.user.id, name, phone || null, logo_url || null]
+        );
+      }
+      await pool.query('UPDATE barbershops SET is_solo = true WHERE id = $1', [req.user.id]);
+    } else {
+      await pool.query('UPDATE barbershops SET is_solo = false WHERE id = $1', [req.user.id]);
+    }
+
+    const result = await pool.query('SELECT * FROM barbershops WHERE id = $1', [req.user.id]);
+    const updated = result.rows[0]; delete updated.password;
+    res.json(updated);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
 // AUTH: submit appeal (when restricted)
 router.post('/me/appeal', authenticateBarbershop, async (req, res) => {
   try {

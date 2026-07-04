@@ -3,8 +3,11 @@ import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
 import { Save, Upload, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function BarberProfile() {
+  const { user } = useAuth();
+  const isSoloShopOwner = user?.type === 'barbershop';
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState({ bio: '', phone: '' });
   const [photoFile, setPhotoFile] = useState(null);
@@ -93,13 +96,20 @@ export default function BarberProfile() {
           <div style={{ color: '#8b92a9', fontSize: 13 }}>{profile.barbershop_name}</div>
         </div>
 
-        <div style={{ display: 'flex', background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
-          {[['profile', 'Profile & Photo'], ['account', 'Account & Password']].map(([t, l], i) => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px', background: tab === t ? 'rgba(212,175,55,0.1)' : 'transparent', border: 'none', borderRight: i === 0 ? '1px solid #1e2a3a' : 'none', color: tab === t ? '#d4af37' : '#8b92a9', cursor: 'pointer', fontWeight: tab === t ? 600 : 400, fontSize: 13 }}>
-              {l}
-            </button>
-          ))}
-        </div>
+        {!isSoloShopOwner && (
+          <div style={{ display: 'flex', background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
+            {[['profile', 'Profile & Photo'], ['account', 'Account & Password']].map(([t, l], i) => (
+              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px', background: tab === t ? 'rgba(212,175,55,0.1)' : 'transparent', border: 'none', borderRight: i === 0 ? '1px solid #1e2a3a' : 'none', color: tab === t ? '#d4af37' : '#8b92a9', cursor: 'pointer', fontWeight: tab === t ? 600 : 400, fontSize: 13 }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
+        {isSoloShopOwner && (
+          <div style={{ background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 18, color: '#d4af37', fontSize: 12 }}>
+            You're managing this as your shop's Solo Operator profile. Your login email &amp; password are managed under Settings → Security.
+          </div>
+        )}
 
         {tab === 'profile' && (
           <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
@@ -129,7 +139,7 @@ export default function BarberProfile() {
           </div>
         )}
 
-        {tab === 'account' && (
+        {tab === 'account' && !isSoloShopOwner && (
           <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
             <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}><Lock size={16} color="#d4af37" /> Account Credentials</h2>
             <p style={{ color: '#8b92a9', fontSize: 13, margin: '0 0 18px' }}>Update your login email and password</p>

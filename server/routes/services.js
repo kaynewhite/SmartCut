@@ -3,7 +3,8 @@ const router = express.Router();
 const pool = require('../db');
 const multer = require('multer');
 const path = require('path');
-const { authenticateBarbershop, authenticateBarber } = require('../middleware/auth');
+const { authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
+const { resolveActingBarberId } = require('../utils/soloBarber');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
@@ -42,39 +43,49 @@ router.get('/by-barber/:barberId', async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// BARBER AUTH: list my own services (all statuses)
-router.get('/mine', authenticateBarber, async (req, res) => {
+// BARBER (or solo shop owner) AUTH: list my own services (all statuses)
+router.get('/mine', authenticateBarbershopOrBarber, async (req, res) => {
   try {
+    const barberId = await resolveActingBarberId(req);
     const result = await pool.query(
       `SELECT s.* FROM services s
        WHERE s.created_by_barber_id = $1
        ORDER BY s.id`,
-      [req.user.id]
+      [barberId]
     );
     res.json(result.rows);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-// BARBER AUTH: all services in my shop (to toggle which I offer)
-router.get('/shop-all', authenticateBarber, async (req, res) => {
+// BARBER (or solo shop owner) AUTH: all services in my shop (to toggle which I offer)
+router.get('/shop-all', authenticateBarbershopOrBarber, async (req, res) => {
   try {
-    const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [req.user.id]);
+    const barberId = await resolveActingBarberId(req);
+    const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [barberId]);
     if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
     const result = await pool.query(
       'SELECT * FROM services WHERE barbershop_id = $1 ORDER BY id',
       [barber.rows[0].barbershop_id]
     );
     res.json(result.rows);
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    console.error(err);
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-// BARBER AUTH: create service (barber sets name, description, price, image)
-router.post('/by-barber', authenticateBarber, upload.single('image'), async (req, res) => {
+// BARBER (or solo shop owner) AUTH: create service (sets name, description, price, image)
+router.post('/by-barber', authenticateBarbershopOrBarber, upload.single('image'), async (req, res) => {
   try {
+    const barberId = await resolveActingBarberId(req);
     const { name, description, price, duration_minutes, category, is_home_service } = req.body;
     if (!name) return res.status(400).json({ message: 'Service name required' });
     if (!price) return res.status(400).json({ message: 'Price is required' });
-    const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [req.user.id]);
+    const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [barberId]);
     if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
     const shopId = barber.rows[0].barbershop_id;
     const image_url = req.file ? `/uploads/${req.file.filename}` : null;
@@ -83,23 +94,28 @@ router.post('/by-barber', authenticateBarber, upload.single('image'), async (req
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true) RETURNING *`,
       [shopId, name.trim(), description || null, parseFloat(price),
        parseInt(duration_minutes) || 30, category || 'haircut', image_url,
-       is_home_service === 'true' || is_home_service === true, req.user.id]
+       is_home_service === 'true' || is_home_service === true, barberId]
     );
     await pool.query(
       'INSERT INTO barber_services (barber_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-      [req.user.id, result.rows[0].id]
+      [barberId, result.rows[0].id]
     );
     res.status(201).json(result.rows[0]);
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    console.error(err);
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-// BARBER AUTH: update own service
-router.put('/by-barber/:id', authenticateBarber, upload.single('image'), async (req, res) => {
+// BARBER (or solo shop owner) AUTH: update own service
+router.put('/by-barber/:id', authenticateBarbershopOrBarber, upload.single('image'), async (req, res) => {
   try {
+    const barberId = await resolveActingBarberId(req);
     const { name, description, price, duration_minutes, category, is_active, is_home_service } = req.body;
     const existing = await pool.query(
       'SELECT * FROM services WHERE id = $1 AND created_by_barber_id = $2',
-      [req.params.id, req.user.id]
+      [req.params.id, barberId]
     );
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found or not your service' });
     const old = existing.rows[0];
@@ -113,22 +129,30 @@ router.put('/by-barber/:id', authenticateBarber, upload.single('image'), async (
        category || old.category, image_url,
        is_active !== undefined ? (is_active === 'true' || is_active === true) : old.is_active,
        is_home_service !== undefined ? (is_home_service === 'true' || is_home_service === true) : old.is_home_service,
-       req.params.id, req.user.id]
+       req.params.id, barberId]
     );
     res.json(result.rows[0]);
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    console.error(err);
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-// BARBER AUTH: delete own service
-router.delete('/by-barber/:id', authenticateBarber, async (req, res) => {
+// BARBER (or solo shop owner) AUTH: delete own service
+router.delete('/by-barber/:id', authenticateBarbershopOrBarber, async (req, res) => {
   try {
+    const barberId = await resolveActingBarberId(req);
     const result = await pool.query(
       'DELETE FROM services WHERE id = $1 AND created_by_barber_id = $2 RETURNING id',
-      [req.params.id, req.user.id]
+      [req.params.id, barberId]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Not found or not your service' });
     res.json({ message: 'Deleted' });
-  } catch (err) { res.status(500).json({ message: 'Cannot delete (may have appointments)' }); }
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Cannot delete (may have appointments)' });
+  }
 });
 
 // SHOP OWNER: list all services (legacy view)

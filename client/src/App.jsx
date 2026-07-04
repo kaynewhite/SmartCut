@@ -63,7 +63,8 @@ function ProtectedBarbershop({ children }) {
 function ProtectedBarber({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Loader />;
-  if (!user || user.type !== 'barber') return <Navigate to="/barber/login" replace />;
+  const isSoloShopOwner = user?.type === 'barbershop' && user?.is_solo;
+  if (!user || (user.type !== 'barber' && !isSoloShopOwner)) return <Navigate to="/barber/login" replace />;
   return children;
 }
 function ProtectedAdmin({ children }) {

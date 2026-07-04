@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS barbershops (
   is_active BOOLEAN DEFAULT true,
   subscription_status TEXT DEFAULT 'inactive',
   rating NUMERIC(3,2) DEFAULT 5.0,
+  is_solo BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

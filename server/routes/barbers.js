@@ -4,7 +4,8 @@ const pool = require('../db');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
-const { authenticateBarbershop, authenticateBarber } = require('../middleware/auth');
+const { authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
+const { resolveActingBarberId } = require('../utils/soloBarber');
 
 const imageFileFilter = (req, file, cb) => {
   if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
@@ -66,49 +67,58 @@ router.get('/me', authenticateBarbershop, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// BARBER: get own profile
-router.get('/me/profile', authenticateBarber, async (req, res) => {
+// BARBER (or solo shop owner): get own profile
+router.get('/me/profile', authenticateBarbershopOrBarber, async (req, res) => {
   try {
+    const barberId = await resolveActingBarberId(req);
     const result = await pool.query(`
       SELECT b.*, bs.name as barbershop_name,
         ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties,
         ARRAY(SELECT service_id FROM barber_services WHERE barber_id = b.id) as service_ids
       FROM barbers b LEFT JOIN barbershops bs ON bs.id = b.barbershop_id
       WHERE b.id = $1
-    `, [req.user.id]);
+    `, [barberId]);
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     const barber = result.rows[0]; delete barber.password;
     res.json(barber);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-// BARBER: update own profile (bio, phone, photo, specialties, service_ids)
-router.put('/me/profile', authenticateBarber, upload.single('photo'), async (req, res) => {
+// BARBER (or solo shop owner): update own profile (bio, phone, photo, specialties, service_ids)
+router.put('/me/profile', authenticateBarbershopOrBarber, upload.single('photo'), async (req, res) => {
   try {
+    const barberId = await resolveActingBarberId(req);
     const { bio, phone, specialties, service_ids } = req.body;
-    const existing = await pool.query('SELECT * FROM barbers WHERE id = $1', [req.user.id]);
+    const existing = await pool.query('SELECT * FROM barbers WHERE id = $1', [barberId]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
     const photo_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].photo_url;
     await pool.query(
       `UPDATE barbers SET bio=$1, phone=$2, photo_url=$3 WHERE id=$4`,
-      [bio ?? existing.rows[0].bio, phone ?? existing.rows[0].phone, photo_url, req.user.id]
+      [bio ?? existing.rows[0].bio, phone ?? existing.rows[0].phone, photo_url, barberId]
     );
     if (specialties !== undefined) {
-      await pool.query('DELETE FROM barber_specialties WHERE barber_id = $1', [req.user.id]);
+      await pool.query('DELETE FROM barber_specialties WHERE barber_id = $1', [barberId]);
       const list = typeof specialties === 'string' ? JSON.parse(specialties || '[]') : (specialties || []);
       for (const sp of list) {
-        if (sp && sp.trim()) await pool.query('INSERT INTO barber_specialties (barber_id, specialty) VALUES ($1,$2)', [req.user.id, sp.trim()]);
+        if (sp && sp.trim()) await pool.query('INSERT INTO barber_specialties (barber_id, specialty) VALUES ($1,$2)', [barberId, sp.trim()]);
       }
     }
     if (service_ids !== undefined) {
-      await pool.query('DELETE FROM barber_services WHERE barber_id = $1', [req.user.id]);
+      await pool.query('DELETE FROM barber_services WHERE barber_id = $1', [barberId]);
       const list = typeof service_ids === 'string' ? JSON.parse(service_ids || '[]') : (service_ids || []);
       for (const sid of list) {
-        await pool.query('INSERT INTO barber_services (barber_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.user.id, sid]);
+        await pool.query('INSERT INTO barber_services (barber_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [barberId, sid]);
       }
     }
     res.json({ ok: true });
-  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    console.error(err);
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 // BARBER: update account credentials (email + password)
@@ -138,13 +148,17 @@ router.put('/me/account', authenticateBarber, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
-// BARBER: toggle own availability
-router.patch('/me/toggle', authenticateBarber, async (req, res) => {
+// BARBER (or solo shop owner): toggle own availability
+router.patch('/me/toggle', authenticateBarbershopOrBarber, async (req, res) => {
   try {
-    const result = await pool.query('UPDATE barbers SET is_available = NOT is_available WHERE id = $1 RETURNING *', [req.user.id]);
+    const barberId = await resolveActingBarberId(req);
+    const result = await pool.query('UPDATE barbers SET is_available = NOT is_available WHERE id = $1 RETURNING *', [barberId]);
     delete result.rows[0].password;
     res.json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: 'Server error' }); }
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ message: err.message });
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 // OWNER: create barber
@@ -152,6 +166,10 @@ router.post('/', authenticateBarbershop, upload.single('photo'), async (req, res
   try {
     const { name, phone, bio, email, password, specialties } = req.body;
     if (!name) return res.status(400).json({ message: 'Name required' });
+    const shopRes = await pool.query('SELECT is_solo FROM barbershops WHERE id = $1', [req.user.id]);
+    if (shopRes.rows[0]?.is_solo) {
+      return res.status(400).json({ message: 'Solo Operator Mode is enabled. Disable it in Settings to add more barbers.' });
+    }
     const photo_url = req.file ? `/uploads/${req.file.filename}` : null;
     let hashedPwd = null, normalizedEmail = null;
     if (email) {
@@ -225,6 +243,10 @@ router.patch('/:id/toggle', authenticateBarbershop, async (req, res) => {
 
 router.delete('/:id', authenticateBarbershop, async (req, res) => {
   try {
+    const shopRes = await pool.query('SELECT is_solo FROM barbershops WHERE id = $1', [req.user.id]);
+    if (shopRes.rows[0]?.is_solo) {
+      return res.status(400).json({ message: 'Disable Solo Operator Mode in Settings before removing your operator profile.' });
+    }
     const result = await pool.query('DELETE FROM barbers WHERE id = $1 AND barbershop_id = $2 RETURNING id', [req.params.id, req.user.id]);
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     res.json({ message: 'Deleted' });

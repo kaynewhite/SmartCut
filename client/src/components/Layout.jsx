@@ -25,6 +25,7 @@ export default function Layout({ children }) {
 
   const isShop = user?.type === 'barbershop';
   const isBarber = user?.type === 'barber';
+  const isSolo = isShop && !!user?.is_solo;
 
   const customerLinks = [
     { to: '/customer/dashboard', icon: <Home size={18} />, label: 'Home' },
@@ -38,8 +39,12 @@ export default function Layout({ children }) {
     { to: '/barbershop/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
     { to: '/barbershop/appointments', icon: <Calendar size={18} />, label: 'Appointments' },
     { to: '/barbershop/queue', icon: <Clock size={18} />, label: 'Queue' },
-    { to: '/barbershop/barbers', icon: <Users size={18} />, label: 'Barbers' },
-    { to: '/barbershop/services', icon: <Briefcase size={18} />, label: 'Service Pricing' },
+    isSolo
+      ? { to: '/barber/profile', icon: <User size={18} />, label: 'My Barber Profile' }
+      : { to: '/barbershop/barbers', icon: <Users size={18} />, label: 'Barbers' },
+    isSolo
+      ? { to: '/barber/services', icon: <Briefcase size={18} />, label: 'My Services' }
+      : { to: '/barbershop/services', icon: <Briefcase size={18} />, label: 'Service Pricing' },
     { to: '/barbershop/promos', icon: <Gift size={18} />, label: 'Loyalty Promos' },
     { to: '/barbershop/reviews', icon: <MessageSquare size={18} />, label: 'Reviews' },
     { to: '/barbershop/settings', icon: <Settings size={18} />, label: 'Settings' },

@@ -73,6 +73,7 @@ async function runMigrations() {
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS appeal_text TEXT`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS appeal_status TEXT DEFAULT 'none'`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS restricted_at TIMESTAMP`,
+    `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS is_solo BOOLEAN DEFAULT false`,
     `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS loyalty_awarded BOOLEAN DEFAULT FALSE`,
     `CREATE TABLE IF NOT EXISTS promo_redemptions (
       id SERIAL PRIMARY KEY,

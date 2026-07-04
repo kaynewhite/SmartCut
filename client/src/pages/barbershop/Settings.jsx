@@ -6,8 +6,9 @@ import toast from 'react-hot-toast';
 import {
   Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight,
   MapPin, CreditCard, CheckCircle, Clock, MessageSquare, Gift,
-  ShieldAlert, Send, Lock, User, ChevronRight
+  ShieldAlert, Send, Lock, User, ChevronRight, Scissors
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import styles from './Settings.module.css';
 
 const PH_PAYMENT_TYPES = [
@@ -27,6 +28,7 @@ const PM_COLORS = {
 
 const NAV_ITEMS = [
   { key: 'profile',      icon: User,         label: 'Shop Profile' },
+  { key: 'operations',   icon: Scissors,      label: 'Operations' },
   { key: 'location',     icon: MapPin,        label: 'Location' },
   { key: 'media',        icon: Image,         label: 'Logo & Media' },
   { key: 'payments',     icon: QrCode,        label: 'Payment Methods' },
@@ -37,7 +39,9 @@ const NAV_ITEMS = [
 ];
 
 export default function BarbershopSettings() {
+  const { user, updateUser } = useAuth();
   const [active, setActive] = useState('profile');
+  const [savingSolo, setSavingSolo] = useState(false);
 
   const [shop, setShop] = useState(null);
   const [form, setForm] = useState({ name: '', phone: '', address: '', city: '', description: '', opening_time: '08:00', closing_time: '20:00', latitude: null, longitude: null });
@@ -202,6 +206,18 @@ export default function BarbershopSettings() {
     finally { setPwSaving(false); }
   };
 
+  const handleToggleSolo = async (enabled) => {
+    setSavingSolo(true);
+    try {
+      const res = await api.put('/barbershops/me/solo-mode', { enabled });
+      setShop(res.data);
+      updateUser({ is_solo: res.data.is_solo });
+      toast.success(enabled ? 'Solo Operator Mode enabled!' : 'Solo Operator Mode disabled');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update Solo Operator Mode');
+    } finally { setSavingSolo(false); }
+  };
+
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
   const setLoy = f => e => setLoyaltyForm(p => ({ ...p, [f]: parseInt(e.target.value) || 0 }));
 
@@ -286,10 +302,10 @@ export default function BarbershopSettings() {
           <nav className={styles.sidebar}>
             {NAV_ITEMS.map((n, i) => {
               const Icon = n.icon;
-              const isDiv = i === 5; // divider before Security
+              const isDiv = i === 6; // divider before Security
               return (
                 <div key={n.key}>
-                  {i === 5 && <div className={styles.navDivider} />}
+                  {i === 6 && <div className={styles.navDivider} />}
                   <button
                     className={`${styles.navItem} ${active === n.key ? styles.active : ''}`}
                     onClick={() => setActive(n.key)}
@@ -325,6 +341,38 @@ export default function BarbershopSettings() {
                   </div>
                   <button className={styles.saveBtn} type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Profile'}</button>
                 </form>
+              </div>
+            )}
+
+            {/* ── OPERATIONS ── */}
+            {active === 'operations' && (
+              <div className={styles.section}>
+                <h2><Scissors size={17} /> Operations</h2>
+                <p className={styles.sectionDesc}>Configure how your shop operates day-to-day.</p>
+
+                <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: 18, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSolo(!user?.is_solo)}
+                    disabled={savingSolo}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: savingSolo ? 'not-allowed' : 'pointer', flexShrink: 0, marginTop: 2 }}
+                  >
+                    {user?.is_solo ? <ToggleRight size={30} color="#16a34a" /> : <ToggleLeft size={30} color="#6b7280" />}
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Solo Operator Mode</div>
+                    <p style={{ color: '#8b92a9', fontSize: 13, margin: '0 0 8px' }}>
+                      Turn this on if you're a one-person barbershop — you're both the owner and the barber.
+                      Your shop account gets its own barber profile, services, availability, and reviews, with no separate barber login to manage.
+                    </p>
+                    {!user?.is_solo && (
+                      <p style={{ color: '#6b7280', fontSize: 12, margin: 0 }}>You can only enable this if your shop has no more than one barber on record.</p>
+                    )}
+                    {user?.is_solo && (
+                      <p style={{ color: '#16a34a', fontSize: 12, margin: 0 }}>Solo Operator Mode is active. Manage your barber profile & services from the sidebar links that now point to "My Barber Profile" and "My Services".</p>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

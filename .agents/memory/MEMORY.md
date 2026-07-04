@@ -2,3 +2,4 @@
 - [CSS modules dynamic classes](css-module-dynamic.md) — never inject CSS module class names via a <style> tag; always define the class in the .module.css file and apply via styles.className.
 - [Subscription status in user object](subscription-status-user.md) — customer login uses SELECT * so subscription_status is in the JWT/localStorage user object; barbershop subscription_status also returned on register.
 - [Walk-ins merged with appointments](walkins-merged.md) — /appointments/shop returns { appointments: [], walk_ins: [] }; barbershop Appointments page must handle both arrays separately.
+- [Solo Operator Mode](solo-operator-mode.md) — barbershop=barber toggle reuses barber routes/UI via resolveActingBarberId(req); new barber routes should use authenticateBarbershopOrBarber for solo support.

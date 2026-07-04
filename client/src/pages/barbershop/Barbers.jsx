@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Plus, Edit2, Trash2, Star, Upload, Mail, Lock, KeyRound, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Star, Upload, Mail, Lock, KeyRound, X, User } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import styles from './Barbers.module.css';
 
 export default function BarbershopBarbers() {
+  const { user } = useAuth();
+  const isSolo = !!user?.is_solo;
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -82,8 +86,19 @@ export default function BarbershopBarbers() {
       <div className={styles.page}>
         <div className={styles.header}>
           <h1>Barbers</h1>
-          <button className={styles.addBtn} onClick={openAdd}><Plus size={16} /> Add Barber</button>
+          {!isSolo && <button className={styles.addBtn} onClick={openAdd}><Plus size={16} /> Add Barber</button>}
         </div>
+
+        {isSolo && (
+          <div style={{ padding: '16px 20px', background: 'rgba(212,175,55,0.08)', border: '1px dashed rgba(212,175,55,0.4)', borderRadius: 10, marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <User size={20} color="#d4af37" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ color: '#d4af37', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Solo Operator Mode is enabled</div>
+              <p style={{ color: '#8b92a9', fontSize: 13, margin: '0 0 8px' }}>Your shop runs as a one-person operation, so you don't need to manage a barber list. Manage your own profile and availability from <Link to="/barber/profile" style={{ color: '#d4af37' }}>My Barber Profile</Link>.</p>
+              <p style={{ color: '#6b7280', fontSize: 12, margin: 0 }}>To add more barbers, disable Solo Operator Mode in <Link to="/barbershop/settings" style={{ color: '#d4af37' }}>Settings</Link> first.</p>
+            </div>
+          </div>
+        )}
 
         {loading ? <div className={styles.loading}>Loading...</div> :
           barbers.length === 0 ? <div className={styles.empty}><p>No barbers yet. Add your first barber!</p></div> :
