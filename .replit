@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "bash"]
+modules = ["nodejs-20", "web", "bash", "postgresql-16"]
 
 [workflows]
 runButton = "Project"
@@ -49,5 +49,3 @@ channel = "stable-25_05"
 JWT_SECRET = "smartcut_jwt_secret_key_2024"
 ADMIN_EMAIL = "eroldjhon.mancilla@lspu.edu.ph"
 ADMIN_PASSWORD = "mancilla123"
-VITE_CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnktc2x1Zy04NC5jbGVyay5hY2NvdW50cy5kZXYk"
-NEON_DATABASE_URL = "postgresql://neondb_owner:npg_ChAniK1ER2DT@ep-little-sunset-an5hosq7-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
