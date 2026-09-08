@@ -1,0 +1,353 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.sidebar {
+  width: 260px;
+  min-height: 100vh;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
+  font-family: 'Playfair Display', serif;
+  color: var(--gold);
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  display: none;
+  padding: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: #0a0e1a;
+  flex-shrink: 0;
+}
+
+.userName {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userType {
+  font-size: 12px;
+  color: var(--gold);
+}
+
+.nav {
+  flex: 1;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  position: relative;
+  white-space: nowrap;
+}
+
+.navLink:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.navLink.active {
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--gold);
+}
+
+.activeArrow {
+  margin-left: auto;
+  color: var(--gold);
+}
+
+.logoutBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 14px;
+  width: 100%;
+  text-align: left;
+  transition: color 0.2s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.logoutBtn:hover { color: var(--error); }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 99;
+}
+
+.main {
+  flex: 1;
+  margin-left: 260px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.header {
+  height: 60px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  flex-shrink: 0;
+}
+
+.menuBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  display: none;
+  padding: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.headerLogo {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 800;
+  font-family: 'Playfair Display', serif;
+  color: var(--gold);
+}
+
+.headerRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notifWrapper {
+  position: relative;
+}
+
+.notifBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  position: relative;
+  padding: 6px;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+  cursor: pointer;
+}
+
+.notifBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--gold);
+  color: #0a0e1a;
+  font-size: 10px;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notifPanel {
+  position: fixed;
+  top: 60px;
+  right: 8px;
+  width: min(320px, calc(100vw - 16px));
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.notifHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.markAllBtn {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.notifList {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notifItem {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.notifItem:hover { background: var(--bg-card-hover); }
+.notifItem.unread { background: rgba(212,175,55,0.05); }
+
+.notifTitle {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.notifMsg {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+.notifTime {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.noNotif {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    width: 280px;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .closeBtn {
+    display: flex;
+  }
+  .main {
+    margin-left: 0;
+  }
+  .menuBtn {
+    display: flex;
+  }
+  .headerLogo {
+    display: flex;
+  }
+  .content {
+    padding: 14px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .content {
+    padding: 12px 10px;
+  }
+  .header {
+    padding: 0 12px;
+  }
+}

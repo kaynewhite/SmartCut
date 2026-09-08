@@ -1,0 +1,372 @@
+.page { max-width: 1100px; margin: 0 auto; }
+
+/* ─── Header ─────────────────────────────────────────────────── */
+.header { margin-bottom: 28px; }
+
+.headerTitle {
+  font-size: 26px;
+  font-weight: 800;
+  color: #f0f0f0;
+  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.headerSub {
+  font-size: 14px;
+  color: #8b92a9;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ─── Location Banner ─────────────────────────────────────────── */
+.locationBanner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(212,175,55,0.1), rgba(212,175,55,0.04));
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 14px;
+  padding: 18px 22px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.locationBannerIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(212,175,55,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.locationBannerText { flex: 1; min-width: 180px; }
+
+.locationBannerTitle {
+  color: #d4af37;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+
+.locationBannerSub {
+  color: #8b92a9;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.locationBannerActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.locBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, transform 0.12s;
+  white-space: nowrap;
+}
+.locBtn:hover { opacity: 0.85; transform: translateY(-1px); }
+.locBtn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.locBtnPrimary  { background: #d4af37; color: #0f1422; }
+.locBtnSecondary { background: #1a2234; border: 1px solid #2d3748; color: #cbd5e1; }
+.locBtnSecondary:hover { border-color: #d4af37; color: #d4af37; }
+.locBtnDanger { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); color: #ef4444; }
+
+/* ─── Feed Sections ───────────────────────────────────────────── */
+.feedSection { margin-bottom: 36px; }
+
+.feedHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.feedTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #f0f0f0;
+  margin: 0 0 4px;
+}
+
+.feedDesc {
+  font-size: 12px;
+  color: #8b92a9;
+  margin-left: 26px;
+}
+
+/* ─── Horizontal Scroll Lane ──────────────────────────────────── */
+.scrollLane {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #2d3748 transparent;
+}
+.scrollLane::-webkit-scrollbar { height: 4px; }
+.scrollLane::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 4px; }
+.scrollLane::-webkit-scrollbar-track { background: transparent; }
+
+/* ─── Shop Card ───────────────────────────────────────────────── */
+.shopCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 210px;
+  max-width: 210px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  overflow: hidden;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.shopCard:hover { transform: translateY(-3px); border-color: rgba(212,175,55,0.5); }
+
+.shopCover {
+  height: 110px;
+  background: #1a2234;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.shopCover img { width: 100%; height: 100%; object-fit: cover; }
+
+.distancePill {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0,0,0,0.72);
+  color: #f0f0f0;
+  border-radius: 20px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.queuePillCard {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  border-radius: 20px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.noWait  { background: rgba(16,185,129,0.18);  color: #10b981; border: 1px solid rgba(16,185,129,0.35); }
+.waiting { background: rgba(245,158,11,0.18);  color: #f59e0b; border: 1px solid rgba(245,158,11,0.35); }
+
+.shopInfo { padding: 12px 14px 14px; }
+.shopName {
+  font-weight: 700;
+  font-size: 14px;
+  color: #f0f0f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shopCity {
+  font-size: 11px;
+  color: #8b92a9;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.shopRating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  font-size: 12px;
+}
+.shopRatingNum  { color: #f59e0b; font-weight: 700; }
+.shopRatingCount { color: #6b7280; font-size: 11px; }
+
+/* ─── Service Card ────────────────────────────────────────────── */
+.serviceCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 192px;
+  max-width: 192px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  overflow: hidden;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.serviceCard:hover { transform: translateY(-3px); border-color: rgba(212,175,55,0.5); }
+
+.serviceCover {
+  height: 100px;
+  background: #1a2234;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.serviceCover img { width: 100%; height: 100%; object-fit: cover; }
+
+.trendingBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.serviceInfo { padding: 12px 14px 14px; }
+.serviceName { font-weight: 700; font-size: 13px; color: #f0f0f0; }
+.serviceBarber { font-size: 11px; color: #8b92a9; margin-top: 2px; }
+.servicePrice { color: #d4af37; font-weight: 800; font-size: 15px; }
+.serviceDur { color: #8b92a9; font-size: 11px; display: flex; align-items: center; gap: 3px; }
+
+/* ─── Barber Card ─────────────────────────────────────────────── */
+.barberCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 152px;
+  max-width: 152px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
+  padding: 18px 12px 14px;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.barberCard:hover { transform: translateY(-3px); border-color: rgba(212,175,55,0.5); }
+
+.barberAvatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #1a2234;
+  border: 2px solid #2d3748;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #d4af37;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.barberAvatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.barberName  { font-weight: 700; font-size: 13px; color: #f0f0f0; text-align: center; }
+.barberShop  { font-size: 11px; color: #8b92a9; margin-top: 2px; text-align: center; }
+.barberRating {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.availBadge {
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Subscriber Lock ─────────────────────────────────────────── */
+.subsLock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 14px;
+  text-align: center;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+  min-height: 340px;
+}
+
+/* ─── Empty State ─────────────────────────────────────────────── */
+.feedEmpty {
+  text-align: center;
+  padding: 40px 24px;
+  color: #6b7280;
+  background: #111827;
+  border: 1px dashed #1f2937;
+  border-radius: 14px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ─── Skeleton Loader ─────────────────────────────────────────── */
+.skeletonLane {
+  display: flex;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.skeleton {
+  min-width: 210px;
+  height: 195px;
+  background: linear-gradient(90deg, #111827 25%, #1a2234 50%, #111827 75%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (max-width: 600px) {
+  .headerTitle { font-size: 22px; }
+  .feedTitle   { font-size: 16px; }
+  .locationBanner { flex-direction: column; align-items: flex-start; }
+}

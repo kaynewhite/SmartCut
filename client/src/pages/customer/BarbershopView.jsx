@@ -1,0 +1,351 @@
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import api from '../../utils/api';
+import toast from 'react-hot-toast';
+import Layout from '../../components/Layout';
+import Map from '../../components/Map';
+import { useShopQueueSocket } from '../../context/SocketContext';
+import styles from './BarbershopView.module.css';
+import { formatTime, formatQueueNumber } from '../../utils/time';
+
+export default function CustomerBarbershop() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('services');
+  const [points, setPoints] = useState(0);
+  const [promos, setPromos] = useState([]);
+  const [redeeming, setRedeeming] = useState(null);
+  const [bookPrompt, setBookPrompt] = useState(null); // { promo, redemption_code, barber_id }
+  const [liveQueue, setLiveQueue] = useState({ unified_queue: [], chairs: [], stats: { total_waiting: 0, in_progress_count: 0 } });
+
+  const refreshLoyalty = () => {
+    api.get(`/loyalty-promos/balance/${id}`).then(r => setPoints(r.data.points || 0)).catch(() => {});
+    api.get('/loyalty-promos', { params: { barbershop_id: id } }).then(r => setPromos(r.data || [])).catch(() => {});
+  };
+
+  const fetchQueue = () => {
+    api.get(`/queue/${id}`).then(r => setLiveQueue(r.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    api.get(`/barbershops/${id}`).then(res => { setData(res.data); setLoading(false); }).catch(() => setLoading(false));
+    refreshLoyalty();
+    fetchQueue();
+  }, [id]);
+
+  // Real-time Queue socket sync
+  useShopQueueSocket(id, {
+    onQueueUpdate: (data) => {
+      setLiveQueue(data);
+    }
+  });
+
+  const redeem = async (promo) => {
+    if (points < promo.points_cost) return toast.error(`You have ${points} pts, need ${promo.points_cost}`);
+    if (!confirm(`Redeem "${promo.name}" for ${promo.points_cost} points?`)) return;
+    setRedeeming(promo.id);
+    try {
+      const res = await api.post(`/loyalty-promos/${promo.id}/redeem`);
+      toast.success(`Redeemed! Code: ${res.data.redemption_code}`);
+      refreshLoyalty();
+      // Prompt to book appointment after redemption
+      setBookPrompt({ promo, redemption_code: res.data.redemption_code, barber_id: promo.barber_id });
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setRedeeming(null); }
+  };
+
+  const goBook = () => {
+    const barberId = bookPrompt?.barber_id;
+    let url = `/customer/book/${id}`;
+    if (barberId) url += `?barber=${barberId}`;
+    setBookPrompt(null);
+    navigate(url);
+  };
+
+  if (loading) return <Layout><div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Loading...</div></Layout>;
+  if (!data) return <Layout><div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Barbershop not found.</div></Layout>;
+
+  const { shop, barbers = [], services = [], reviews = [] } = data;
+  const categories = [...new Set((services || []).map(s => s.category).filter(Boolean))];
+
+  return (
+    <Layout>
+      <div className={styles.page}>
+        <div className={styles.cover} style={shop.cover_url ? { backgroundImage: `url(${shop.cover_url})` } : {}}>
+          <div className={styles.coverOverlay}>
+            <div className={styles.shopHeader}>
+              <div className={styles.shopLogo}>
+                {shop.logo_url ? <img src={shop.logo_url} alt={shop.name} /> : <Scissors size={28} color="#d4af37" />}
+              </div>
+              <div>
+                <h1 className={styles.shopName}>{shop.name}</h1>
+                <div className={styles.shopMeta}>
+                  {shop.city && <span><MapPin size={13} /> {shop.city}</span>}
+                  <span><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(shop.avg_rating).toFixed(1)} ({shop.review_count} reviews)</span>
+                  {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time?.substring(0,5))} – {formatTime(shop.closing_time?.substring(0,5))}</span>}
+                </div>
+              </div>
+              <Link to={`/customer/book/${id}`} className={styles.bookBtn}>Book Now <ChevronRight size={16} /></Link>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.body}>
+          {shop.description && <p className={styles.desc}>{shop.description}</p>}
+
+          <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'rgba(212,175,55,0.12)',border:'1px solid rgba(212,175,55,0.4)',borderRadius:10,marginBottom:14}}>
+            <Gift size={18} color="#d4af37" />
+            <div style={{flex:1}}>
+              <div style={{color:'#d4af37',fontWeight:700,fontSize:15}}>Your loyalty points at this shop: {points}</div>
+              <div style={{color:'#8b92a9',fontSize:11}}>Earned only at {data.shop.name}. Use them on the Promos tab below.</div>
+            </div>
+          </div>
+
+          <div className={styles.tabs}>
+            {['services', 'barbers', 'queue', 'promos', 'reviews', 'location'].map(t => (
+              <button key={t} className={`${styles.tab} ${tab === t ? styles.active : ''}`} onClick={() => setTab(t)}>
+                {t === 'queue' ? 'Live Queue' : t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'queue' && (
+            <div>
+              <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: 14, padding: 20, marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <h3 style={{ color: '#f0f0f0', margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>Today's Live Queue</h3>
+                    <p style={{ color: '#8b92a9', fontSize: 13, margin: 0 }}>
+                      {liveQueue.stats?.total_waiting || 0} waiting · {liveQueue.stats?.in_progress_count || 0} in progress · ~{liveQueue.stats?.est_wait_minutes || 0} min est. wait
+                    </p>
+                  </div>
+                  <Link
+                    to={`/customer/queue/${id}`}
+                    style={{ padding: '8px 16px', background: '#d4af37', color: '#0f1422', fontWeight: 700, borderRadius: 8, textDecoration: 'none', fontSize: 13 }}
+                  >
+                    Open Live Queue Screen →
+                  </Link>
+                </div>
+
+                {/* Barber Chairs */}
+                {liveQueue.chairs?.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginTop: 14 }}>
+                    {liveQueue.chairs.map(c => (
+                      <div key={c.barber_id} style={{ background: '#1a2234', border: '1px solid #2d3748', borderRadius: 10, padding: 12 }}>
+                        <div style={{ fontWeight: 700, color: '#f0f0f0', fontSize: 13 }}>{c.barber_name}</div>
+                        <div style={{ fontSize: 11, color: c.status === 'serving' ? '#3b82f6' : c.status === 'available' ? '#10b981' : '#ef4444', marginTop: 2, fontWeight: 600 }}>
+                          {c.status === 'serving' ? 'In Service' : c.status === 'available' ? 'Ready for Next' : 'Offline'}
+                        </div>
+                        {c.current_serving && (
+                          <div style={{ fontSize: 11, color: '#8b92a9', marginTop: 4 }}>Serving: {c.current_serving.service_name}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'services' && (
+            <div>
+              {categories.map(cat => (
+                <div key={cat} className={styles.catGroup}>
+                  <div className={styles.catTitle}>{cat}</div>
+                  <div className={styles.serviceList}>
+                    {services.filter(s => s.category === cat).map(s => (
+                      <div key={s.id} className={styles.serviceCard}>
+                        <div className={styles.svcImg}>
+                          {s.image_url ? <img src={s.image_url} alt={s.name} /> : <Scissors size={20} color="#4b5563" />}
+                        </div>
+                        <div className={styles.svcInfo}>
+                          <div className={styles.svcName}>{s.name}</div>
+                          {s.description && <div className={styles.svcDesc}>{s.description}</div>}
+                          <div className={styles.svcMeta}>
+                            <span className={styles.svcPrice}>₱{parseFloat(s.price).toFixed(0)}</span>
+                            <span className={styles.svcDuration}>{s.duration_minutes} min</span>
+                            {s.is_home_service && <span className="badge badge-info">Home Service</span>}
+                          </div>
+                        </div>
+                        <Link to={`/customer/book/${id}?service=${s.id}`} className={styles.bookSvcBtn}>Book</Link>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === 'barbers' && (
+            <div className={styles.barberGrid}>
+              {barbers.map(b => {
+                const specs = (b.specialties || []).filter(Boolean);
+                const svcIds = (b.service_ids || []).filter(Boolean);
+                const svcNames = services.filter(s => svcIds.includes(s.id)).map(s => s.name);
+                return (
+                  <div key={b.id} className={styles.barberCard}>
+                    <div className={styles.barberPhoto}>
+                      {b.photo_url ? <img src={b.photo_url} alt={b.name} /> : b.name.charAt(0)}
+                    </div>
+                    <div className={styles.barberName}>{b.name}</div>
+                    <div className={styles.barberRating}><Star size={12} fill="#f59e0b" color="#f59e0b" /> {parseFloat(b.avg_rating).toFixed(1)}</div>
+                    <div style={{marginTop:8,width:'100%'}}>
+                      <div style={{fontSize:11,color:'#8b92a9',textTransform:'uppercase',letterSpacing:0.5,marginBottom:4,textAlign:'left'}}>Specialties</div>
+                      {specs.length > 0 ? (
+                        <div className={styles.specialties}>
+                          {specs.map((sp, i) => <span key={i} className="badge badge-gold">{sp}</span>)}
+                        </div>
+                      ) : (
+                        <div style={{fontSize:12,color:'#6b7280',fontStyle:'italic'}}>No specialties listed</div>
+                      )}
+                    </div>
+                    {svcNames.length > 0 && (
+                      <div style={{marginTop:10,width:'100%'}}>
+                        <div style={{fontSize:11,color:'#8b92a9',textTransform:'uppercase',letterSpacing:0.5,marginBottom:4,textAlign:'left'}}>Services</div>
+                        <div style={{fontSize:12,color:'#cbd5e1',textAlign:'left'}}>{svcNames.join(' • ')}</div>
+                      </div>
+                    )}
+                    {b.bio && <div className={styles.bio} style={{marginTop:8}}>{b.bio}</div>}
+                    <span className={`badge ${b.is_available ? 'badge-success' : 'badge-error'}`} style={{marginTop:8}}>{b.is_available ? 'Available' : 'Busy'}</span>
+                  </div>
+                );
+              })}
+              {barbers.length === 0 && <div style={{color:'var(--text-muted)',padding:'20px'}}>No barbers listed yet.</div>}
+            </div>
+          )}
+
+          {tab === 'promos' && (
+            <div>
+              {promos.length === 0 ? (
+                <div style={{textAlign:'center',padding:40,color:'var(--text-muted)'}}>
+                  <Gift size={36} color="#d4af37" />
+                  <p>This shop has no active promos right now.</p>
+                </div>
+              ) : (
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:16}}>
+                  {promos.map(p => {
+                    const canAfford = points >= p.points_cost;
+                    return (
+                      <div key={p.id} style={{background:'#1a2234',border:'1px solid #2d3748',borderRadius:10,overflow:'hidden'}}>
+                        {p.image_url ? <img src={p.image_url} alt={p.name} style={{width:'100%',height:130,objectFit:'cover'}}/>
+                          : <div style={{height:130,background:'linear-gradient(135deg,#d4af37,#a8841d)',display:'flex',alignItems:'center',justifyContent:'center'}}><Gift size={40} color="#0f1422"/></div>}
+                        <div style={{padding:14}}>
+                          <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
+                          {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
+                          {p.barber_name && (
+                            <div style={{marginTop:8,display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#8b92a9'}}>
+                              <Scissors size={11} color="#d4af37" />
+                              <span>Barber: <strong style={{color:'#f0f0f0'}}>{p.barber_name}</strong></span>
+                              {p.barber_available !== undefined && (
+                                <span style={{padding:'1px 6px',borderRadius:3,fontSize:10,background:p.barber_available?'rgba(16,185,129,0.15)':'rgba(239,68,68,0.15)',color:p.barber_available?'#10b981':'#ef4444'}}>
+                                  {p.barber_available ? 'Available' : 'Busy'}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
+                            <span style={{color:'#d4af37',fontWeight:700,fontSize:14,display:'inline-flex',alignItems:'center',gap:4}}><Gift size={12}/>{p.points_cost} pts</span>
+                            <button onClick={() => redeem(p)} disabled={!canAfford || redeeming === p.id}
+                              style={{padding:'6px 12px',background:canAfford?'#d4af37':'#374151',color:canAfford?'#0f1422':'#8b92a9',border:'none',borderRadius:4,fontWeight:700,fontSize:12,cursor:canAfford?'pointer':'not-allowed'}}>
+                              {redeeming === p.id ? '...' : canAfford ? 'Redeem' : `Need ${p.points_cost - points} more`}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'reviews' && (
+            <div className={styles.reviews}>
+              {reviews.map(r => (
+                <div key={r.id} className={styles.reviewCard}>
+                  <div className={styles.reviewHeader}>
+                    <div className={styles.reviewAvatar}>{r.customer_name?.charAt(0)}</div>
+                    <div>
+                      <div className={styles.reviewName}>{r.customer_name}</div>
+                      <div className={styles.stars}>{'★'.repeat(r.barbershop_rating)}{'☆'.repeat(5 - r.barbershop_rating)}</div>
+                    </div>
+                    <div className={styles.reviewDate}>{new Date(r.created_at).toLocaleDateString()}</div>
+                  </div>
+                  {r.comment && <div className={styles.reviewComment}>{r.comment}</div>}
+                  {r.barber_name && <div className={styles.reviewBarber}>Barber: {r.barber_name} {'★'.repeat(r.barber_rating || 0)}</div>}
+                </div>
+              ))}
+              {reviews.length === 0 && <div style={{color:'var(--text-muted)',padding:'20px',textAlign:'center'}}>No reviews yet. Be the first!</div>}
+            </div>
+          )}
+
+          {tab === 'location' && (
+            <div className={styles.locationTab}>
+              {shop.latitude && shop.longitude ? (
+                <Map
+                  center={[shop.latitude, shop.longitude]}
+                  zoom={16}
+                  markers={[{ id: shop.id, name: shop.name, address: shop.address, city: shop.city, latitude: shop.latitude, longitude: shop.longitude }]}
+                  height="400px"
+                  interactive={false}
+                />
+              ) : (
+                <div style={{textAlign:'center',padding:'40px',color:'var(--text-muted)'}}>
+                  <MapPin size={40} />
+                  <p>Location not set by the barbershop yet.</p>
+                </div>
+              )}
+              <div className={styles.locationInfo}>
+                <h3>Location Details</h3>
+                {shop.address && <p><strong>Address:</strong> {shop.address}</p>}
+                {shop.city && <p><strong>City:</strong> {shop.city}</p>}
+                {shop.phone && <p><strong>Phone:</strong> {shop.phone}</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Book after promo redemption prompt */}
+      {bookPrompt && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+          <div style={{background:'#1a2234',border:'1px solid rgba(212,175,55,0.4)',borderRadius:14,padding:28,maxWidth:420,width:'100%',position:'relative'}}>
+            <button onClick={() => setBookPrompt(null)} style={{position:'absolute',top:14,right:14,background:'none',border:'none',color:'#8b92a9',cursor:'pointer',padding:4}}>
+              <X size={18} />
+            </button>
+            <div style={{textAlign:'center',marginBottom:20}}>
+              <div style={{width:56,height:56,borderRadius:12,background:'rgba(16,185,129,0.15)',border:'1px solid rgba(16,185,129,0.4)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}>
+                <CheckCircle size={30} color="#10b981" />
+              </div>
+              <h3 style={{color:'#f0f0f0',margin:'0 0 6px',fontSize:18}}>Promo Redeemed!</h3>
+              <p style={{color:'#8b92a9',fontSize:13,margin:0}}>"{bookPrompt.promo.name}"</p>
+              <div style={{marginTop:10,padding:'8px 14px',background:'rgba(212,175,55,0.1)',border:'1px solid rgba(212,175,55,0.3)',borderRadius:8,display:'inline-block'}}>
+                <span style={{color:'#d4af37',fontWeight:700,fontSize:15,letterSpacing:2}}>{bookPrompt.redemption_code}</span>
+              </div>
+              <p style={{color:'#8b92a9',fontSize:11,marginTop:6}}>Show this code to the barber</p>
+            </div>
+            {bookPrompt.promo.barber_name && (
+              <div style={{padding:'10px 14px',background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:8,marginBottom:16,fontSize:13,color:'#93c5fd',display:'flex',alignItems:'center',gap:8}}>
+                <Scissors size={14} color="#60a5fa" />
+                This promo is for barber <strong style={{color:'#f0f0f0'}}>{bookPrompt.promo.barber_name}</strong>
+              </div>
+            )}
+            <p style={{color:'#8b92a9',fontSize:13,textAlign:'center',marginBottom:18}}>
+              Would you like to book an appointment now to use this promo?
+            </p>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={goBook} style={{flex:1,padding:'12px',background:'#d4af37',color:'#0f1422',border:'none',borderRadius:8,fontWeight:700,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                <Calendar size={16} /> Book Appointment
+              </button>
+              <button onClick={() => setBookPrompt(null)} style={{flex:1,padding:'12px',background:'transparent',color:'#8b92a9',border:'1px solid #2d3748',borderRadius:8,fontWeight:600,fontSize:14,cursor:'pointer'}}>
+                Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+}

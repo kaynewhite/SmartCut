@@ -1,0 +1,237 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
+  --bg-card: #1a2234;
+  --bg-card-hover: #1f2a40;
+  --gold: #d4af37;
+  --gold-light: #f0d060;
+  --gold-dark: #b8961e;
+  --text-primary: #f0f0f0;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --border: #2d3748;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: 'Playfair Display', serif;
+  line-height: 1.3;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+
+/* Prevent iOS zoom on input focus — always 16px */
+input, textarea, select {
+  font-family: inherit;
+  font-size: 16px;
+}
+
+img { max-width: 100%; height: auto; display: block; }
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* ─── Overflow guard ─── */
+#root {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* ─── Leaflet map theme ─── */
+.leaflet-container {
+  background: #0a1020 !important;
+  font-family: inherit !important;
+}
+.leaflet-tile-pane {
+  filter: brightness(0.82) saturate(0.65);
+}
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background: rgba(10,14,26,0.85) !important;
+  color: #6b7280 !important;
+}
+.leaflet-control-attribution a { color: #d4af37 !important; }
+.leaflet-bar a {
+  background: #0f1827 !important;
+  color: #f0f0f0 !important;
+  border-color: #1e2a3a !important;
+}
+.leaflet-bar a:hover { background: #1e2a3a !important; }
+.leaflet-popup-content-wrapper {
+  background: #0f1827 !important;
+  color: #f0f0f0 !important;
+  border: 1px solid #1e2a3a !important;
+  border-radius: 8px !important;
+}
+.leaflet-popup-tip { background: #0f1827 !important; }
+
+/* ─── Reusable utility classes ─── */
+.gold-text { color: var(--gold); }
+
+.page-container {
+  max-width: 1100px;
+  width: 100%;
+}
+
+/* Responsive grids */
+.r-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.r-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.r-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .r-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .r-grid-3 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .r-grid-2 { grid-template-columns: 1fr; }
+  .r-grid-3 { grid-template-columns: 1fr; }
+  .r-grid-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 380px) {
+  .r-grid-4 { grid-template-columns: 1fr; }
+}
+
+/* ─── Global mobile overrides ─── */
+@media (max-width: 768px) {
+  /* Prevent overflow from inline max-width containers */
+  [style*="maxWidth"] { max-width: 100% !important; }
+
+  /* Tables scroll instead of causing overflow */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 13px;
+    width: 100%;
+  }
+
+  /* Prevent any fixed-width element from blowing the layout */
+  [style*="width: 380px"],
+  [style*="width: 400px"],
+  [style*="width: 500px"],
+  [style*="width: 600px"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Inline grid overrides */
+  [style*="grid-template-columns: repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+  [style*="grid-template-columns: repeat(3"] { grid-template-columns: repeat(2, 1fr) !important; }
+  [style*="grid-template-columns: 1fr 1fr"]  { grid-template-columns: 1fr !important; }
+}
+
+/* ─── Card ─── */
+.sc-card {
+  background: #0f1827;
+  border: 1px solid #1e2a3a;
+  border-radius: 12px;
+  padding: 18px;
+}
+
+/* ─── Buttons ─── */
+.btn-gold {
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #d4af37, #a8841d);
+  color: #0f1422;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  transition: opacity .15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-gold:hover:not(:disabled) { opacity: 0.88; }
+
+.btn-ghost {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid #1e2a3a;
+  color: #8b92a9;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all .15s;
+}
+.btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ─── Form inputs ─── */
+.sc-input {
+  width: 100%;
+  background: #0a1020;
+  border: 1px solid #1e2a3a;
+  color: #f0f0f0;
+  padding: 11px 13px;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color .15s;
+}
+.sc-input:focus { outline: none; border-color: var(--gold); }
+.sc-input::placeholder { color: #4b5563; }
+
+/* ─── Status badges ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-gold    { background: rgba(212,175,55,0.15);  color: var(--gold); }
+.badge-success { background: rgba(16,185,129,0.15);  color: var(--success); }
+.badge-error   { background: rgba(239,68,68,0.15);   color: var(--error); }
+.badge-warning { background: rgba(245,158,11,0.15);  color: var(--warning); }
+.badge-info    { background: rgba(59,130,246,0.15);  color: var(--info); }
+
+/* ─── Mobile bottom-sheet modals (shared) ─── */
+@media (max-width: 768px) {
+  /* Any modal that uses align-items: center shifts to bottom-sheet */
+  [class*="modalBg"],
+  [class*="modal-bg"] {
+    align-items: flex-end !important;
+  }
+}
