@@ -7,6 +7,7 @@ import Map from '../../components/Map';
 import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight, Gift, CheckCircle, X, Calendar } from 'lucide-react';
 import styles from './BarbershopView.module.css';
 import { formatTime } from '../../utils/time';
+import { Scissors, MapPin, Star, Clock, ChevronRight, Gift, X, CheckCircle, Calendar } from 'lucide-react' ;
 
 export default function CustomerBarbershop() {
   const { id } = useParams();
