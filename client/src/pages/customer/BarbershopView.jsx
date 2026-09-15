@@ -7,6 +7,7 @@ import Map from '../../components/Map';
 import { useShopQueueSocket } from '../../context/SocketContext';
 import styles from './BarbershopView.module.css';
 import { formatTime, formatQueueNumber } from '../../utils/time';
+import { Scissors, MapPin, Star, Clock, ChevronRight, Gift, X, CheckCircle, Calendar } from 'lucide-react' ;
 
 export default function CustomerBarbershop() {
   const { id } = useParams();
