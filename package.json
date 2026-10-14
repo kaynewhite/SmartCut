@@ -2,6 +2,7 @@
   "name": "smartcut",
   "version": "1.0.0",
   "scripts": {
+    "build": "npm ci --prefix client && npm run build --prefix client",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
