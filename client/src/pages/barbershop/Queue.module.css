@@ -16,7 +16,7 @@
 .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; text-align: center; }
 .statNum { font-size: 36px; font-weight: 800; color: var(--gold); }
 .statLabel { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
-.sections { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.sections { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
 .section h2 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
 .empty { text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px; }
@@ -36,6 +36,12 @@
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .input { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 12px; color: var(--text-primary); font-size: 16px; outline: none; width: 100%; }
+.walkInDate::-webkit-calendar-picker-indicator { filter: brightness(0) invert(1); cursor: pointer; }
+.timeSlots { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.timeSlot { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; color: var(--text-secondary); padding: 10px 8px; font-size: 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s; }
+.timeSlot:hover { border-color: var(--gold); color: var(--gold); }
+.selectedTimeSlot, .selectedTimeSlot:hover { background: rgba(212,175,55,0.14); border-color: var(--gold); color: var(--gold); font-weight: 700; }
+.noAvailableTimes { grid-column: 1 / -1; color: var(--text-muted); font-size: 12px; padding: 8px 0; }
 .modalActions { display: flex; gap: 10px; }
 .saveBtn { flex: 1; background: var(--gold); color: #0a0e1a; border: none; padding: 12px; border-radius: 8px; font-weight: 700; }
 .cancelBtn { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); padding: 12px; border-radius: 8px; font-weight: 600; }

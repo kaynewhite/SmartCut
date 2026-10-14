@@ -76,6 +76,19 @@ async function runMigrations() {
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS is_solo BOOLEAN DEFAULT false`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS solo_barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL`,
     `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS loyalty_awarded BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_contact_name TEXT`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_contact_phone TEXT`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_service_notes TEXT`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_service_type TEXT DEFAULT 'personal'`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS is_event_booking BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE barbers ADD COLUMN IF NOT EXISTS event_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
+    `ALTER TABLE walk_ins ADD COLUMN IF NOT EXISTS appointment_date DATE`,
+    `ALTER TABLE walk_ins ADD COLUMN IF NOT EXISTS appointment_time TIME`,
+    `ALTER TABLE walk_ins ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30`,
+    `UPDATE walk_ins SET appointment_date = COALESCE(appointment_date, created_at::date),
+       appointment_time = COALESCE(appointment_time, created_at::time)
+     WHERE appointment_date IS NULL OR appointment_time IS NULL`,
+    `UPDATE services SET duration_minutes = 30 WHERE duration_minutes IS DISTINCT FROM 30`,
     `CREATE TABLE IF NOT EXISTS promo_redemptions (
       id SERIAL PRIMARY KEY,
       customer_id INTEGER NOT NULL,
@@ -90,6 +103,9 @@ async function runMigrations() {
     `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'`,
     `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS appointment_id INTEGER`,
     `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL`,
+    `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS real_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
+    `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS service_id INTEGER REFERENCES services(id) ON DELETE SET NULL`,
+    `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS promo_value NUMERIC(10,2) NOT NULL DEFAULT 0`,
   ];
   for (const sql of migrations) {
     try { await pool.query(sql); } catch (err) { console.error('Migration error:', err.message); }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
-import Map, { SINILOAN_CENTER, DEFAULT_ZOOM } from '../../components/Map';
+import Map, { DEFAULT_ZOOM } from '../../components/Map';
 import toast from 'react-hot-toast';
 import {
   Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight,
@@ -226,6 +226,11 @@ export default function BarbershopSettings() {
 
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
   const setLoy = f => e => setLoyaltyForm(p => ({ ...p, [f]: parseInt(e.target.value) || 0 }));
+  const subscriptionState = subStatus
+    ? subStatus.is_active ? 'active'
+      : subStatus.subscription?.status === 'pending' ? 'pending'
+        : 'inactive'
+    : shop?.subscription_status === 'active' || user?.subscription_status === 'active' ? 'active' : null;
 
   const inp = { className: styles.input };
   const ta = { className: styles.textarea };
@@ -333,6 +338,12 @@ export default function BarbershopSettings() {
               <div className={styles.section}>
                 <h2><User size={17} /> Shop Profile</h2>
                 <p className={styles.sectionDesc}>Update your shop's name, contact info, hours, and description.</p>
+                {subscriptionState && (
+                  <div className={`${styles.badgeRow} ${subscriptionState === 'active' ? styles.badgeSuccess : subscriptionState === 'pending' ? styles.badgeWarn : ''}`} style={{ marginBottom: 16, ...(subscriptionState === 'inactive' ? { background: 'rgba(107,114,128,0.08)', border: '1px solid rgba(107,114,128,0.25)', color: '#9ca3af' } : {}) }}>
+                    {subscriptionState === 'active' ? <CheckCircle size={16} /> : subscriptionState === 'pending' ? <Clock size={16} /> : <CreditCard size={16} />}
+                    <span>{subscriptionState === 'active' ? 'Subscription Active' : subscriptionState === 'pending' ? 'Subscription Pending Approval' : 'Not Subscribed'}</span>
+                  </div>
+                )}
                 <form onSubmit={handleSave} className={styles.form}>
                   <div className={styles.field}><label>Shop Name *</label><input {...inp} value={form.name} onChange={set('name')} required /></div>
                   <div className={styles.row}>
@@ -387,7 +398,7 @@ export default function BarbershopSettings() {
               <div className={styles.section}>
                 <h2><MapPin size={17} /> Shop Location</h2>
                 <p className={styles.sectionDesc}>Click on the map to place your shop's pin, then save the location.</p>
-                <Map center={location || SINILOAN_CENTER} zoom={DEFAULT_ZOOM} onLocationSelect={setLocation} selectedLocation={location} height="360px" />
+                <Map zoom={DEFAULT_ZOOM} onLocationSelect={setLocation} selectedLocation={location} height="360px" />
                 {location && (
                   <div className={styles.locationInfo}>
                     Pin: {location[0].toFixed(6)}, {location[1].toFixed(6)}
@@ -510,7 +521,7 @@ export default function BarbershopSettings() {
             {active === 'subscription' && (
               <div className={styles.section}>
                 <h2><CreditCard size={17} /> Subscription</h2>
-                <p className={styles.sectionDesc}>An active subscription makes your shop visible to customers on the explore page.</p>
+                <p className={styles.sectionDesc}>An active subscription makes your shop visible to customers on the For You page.</p>
 
                 {subStatus?.is_active ? (
                   <div className={`${styles.badgeRow} ${styles.badgeSuccess}`} style={{ marginBottom: 0 }}>

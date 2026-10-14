@@ -43,15 +43,18 @@ export default function CustomerQueue() {
   const myAppointment = queue.appointments.find(a => String(a.customer_id) === String(user?.id));
   const myPosition = myAppointment?.position ?? null;
   const peopleAhead = myPosition ? myPosition - 1 : null;
+  const activeQueue = [
+    ...queue.appointments.map(entry => ({ ...entry, entryType: 'appointment' })),
+    ...queue.walk_ins.map(entry => ({ ...entry, entryType: 'walk_in' }))
+  ].sort((a, b) => Number(a.position) - Number(b.position));
 
   const estWaitMinutes = (() => {
     if (!myAppointment) return null;
-    const ahead = queue.appointments.filter(a =>
-      (a.position || 0) < (myAppointment.position || 0) &&
-      ['pending', 'confirmed', 'in_progress'].includes(a.status)
+    const ahead = activeQueue.filter(entry =>
+      entry.position < myAppointment.position &&
+      ['pending', 'confirmed', 'in_progress', 'waiting'].includes(entry.status)
     );
-    if (ahead.length === 0) return 0;
-    return ahead.reduce((sum, a) => sum + (parseInt(a.duration_minutes) || 20), 0);
+    return ahead.length * 30;
   })();
 
   const waitingAppts = queue.appointments.filter(a => ['pending','confirmed'].includes(a.status));
@@ -109,7 +112,7 @@ export default function CustomerQueue() {
                       {myAppointment.barber_name && <span style={{ color: '#8b92a9', fontWeight: 400 }}> · {myAppointment.barber_name}</span>}
                     </div>
                     <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>
-                      <Clock size={12} style={{ verticalAlign: 'middle' }} /> {formatTime(myAppointment.appointment_time?.substring(0, 5))}
+                      <Clock size={12} style={{ verticalAlign: 'middle' }} /> {formatTime(myAppointment.appointment_time)}
                     </div>
                     {peopleAhead > 0 && (
                       <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 4 }}>
@@ -159,7 +162,7 @@ export default function CustomerQueue() {
             <Clock size={22} color="#f59e0b" />
             <div>
               <div className={styles.statNum}>
-                {totalWaiting === 0 ? '0' : `~${queue.appointments.slice(0, totalWaiting).reduce((s, a) => s + (parseInt(a.duration_minutes) || 20), 0)}`}
+                {totalWaiting === 0 ? '0' : `~${totalWaiting * 30}`}
               </div>
               <div className={styles.statLabel}>Est. Wait (min)</div>
             </div>
@@ -189,7 +192,7 @@ export default function CustomerQueue() {
                       <div className={styles.queueMeta}>
                         {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''}
                       </div>
-                      <div className={styles.queueTime}><Clock size={12} /> {formatTime(a.appointment_time?.substring(0, 5))}</div>
+                      <div className={styles.queueTime}><Clock size={12} /> {formatTime(a.appointment_time)}</div>
                     </div>
                     <span className={`badge ${a.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
                       {a.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
@@ -211,7 +214,12 @@ export default function CustomerQueue() {
                   <div className={styles.queueNum}>{formatQueueNumber(w.position)}</div>
                   <div className={styles.queueInfo}>
                     <div className={styles.queueName}>Walk-in {formatQueueNumber(w.position)}</div>
-                    <div className={styles.queueMeta}>{w.service_name || 'Walk-in'}{w.barber_name ? ` · ${w.barber_name}` : ''}</div>
+                    <div className={styles.queueMeta}>
+                      {w.service_name || 'Walk-in'}{w.barber_name ? ` · ${w.barber_name}` : ''}
+                    </div>
+                    <div className={styles.queueTime}>
+                      <Clock size={12} /> {formatTime(w.appointment_time)} · 30 min
+                    </div>
                   </div>
                   <span className={`badge ${w.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
                     {w.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}

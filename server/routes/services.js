@@ -6,6 +6,17 @@ const path = require('path');
 const { authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
 const { resolveActingBarberId } = require('../utils/soloBarber');
 
+const SERVICE_CATEGORIES = new Set(['haircut', 'beard', 'shave', 'color', 'treatment', 'kids', 'massage', 'other']);
+
+function normalizeCategory(category) {
+  const normalized = String(category || 'haircut').trim().toLowerCase();
+  return normalized === 'coloring' ? 'color' : normalized;
+}
+
+function isValidCategory(category) {
+  return SERVICE_CATEGORIES.has(normalizeCategory(category));
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
   filename: (req, file, cb) => cb(null, `svc_${Date.now()}${path.extname(file.originalname)}`)
@@ -82,9 +93,10 @@ router.get('/shop-all', authenticateBarbershopOrBarber, async (req, res) => {
 router.post('/by-barber', authenticateBarbershopOrBarber, upload.single('image'), async (req, res) => {
   try {
     const barberId = await resolveActingBarberId(req);
-    const { name, description, price, duration_minutes, category, is_home_service } = req.body;
+    const { name, description, price, category, is_home_service } = req.body;
     if (!name) return res.status(400).json({ message: 'Service name required' });
     if (!price) return res.status(400).json({ message: 'Price is required' });
+    if (category && !isValidCategory(category)) return res.status(400).json({ message: 'Choose a valid service category' });
     const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [barberId]);
     if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
     const shopId = barber.rows[0].barbershop_id;
@@ -93,7 +105,7 @@ router.post('/by-barber', authenticateBarbershopOrBarber, upload.single('image')
       `INSERT INTO services (barbershop_id, name, description, price, duration_minutes, category, image_url, is_home_service, created_by_barber_id, is_active)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true) RETURNING *`,
       [shopId, name.trim(), description || null, parseFloat(price),
-       parseInt(duration_minutes) || 30, category || 'haircut', image_url,
+       30, normalizeCategory(category), image_url,
        is_home_service === 'true' || is_home_service === true, barberId]
     );
     await pool.query(
@@ -112,7 +124,8 @@ router.post('/by-barber', authenticateBarbershopOrBarber, upload.single('image')
 router.put('/by-barber/:id', authenticateBarbershopOrBarber, upload.single('image'), async (req, res) => {
   try {
     const barberId = await resolveActingBarberId(req);
-    const { name, description, price, duration_minutes, category, is_active, is_home_service } = req.body;
+    const { name, description, price, category, is_active, is_home_service } = req.body;
+    if (category !== undefined && !isValidCategory(category)) return res.status(400).json({ message: 'Choose a valid service category' });
     const existing = await pool.query(
       'SELECT * FROM services WHERE id = $1 AND created_by_barber_id = $2',
       [req.params.id, barberId]
@@ -125,8 +138,8 @@ router.put('/by-barber/:id', authenticateBarbershopOrBarber, upload.single('imag
        WHERE id=$9 AND created_by_barber_id=$10 RETURNING *`,
       [name || old.name, description ?? old.description,
        price ? parseFloat(price) : old.price,
-       duration_minutes ? parseInt(duration_minutes) : old.duration_minutes,
-       category || old.category, image_url,
+       30,
+       category !== undefined ? normalizeCategory(category) : old.category, image_url,
        is_active !== undefined ? (is_active === 'true' || is_active === true) : old.is_active,
        is_home_service !== undefined ? (is_home_service === 'true' || is_home_service === true) : old.is_home_service,
        req.params.id, barberId]
@@ -166,6 +179,59 @@ router.get('/me', authenticateBarbershop, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
+});
+
+// SHOP OWNER: update pricing, category, and visibility for a service in this shop
+router.put('/:id', authenticateBarbershop, async (req, res) => {
+  try {
+    const { price, category, is_active } = req.body;
+    if (category !== undefined && !isValidCategory(category)) {
+      return res.status(400).json({ message: 'Choose a valid service category' });
+    }
+    if (price !== undefined && price !== '' && (!Number.isFinite(Number(price)) || Number(price) <= 0)) {
+      return res.status(400).json({ message: 'Price must be greater than 0' });
+    }
+    const existing = await pool.query(
+      'SELECT * FROM services WHERE id = $1 AND barbershop_id = $2',
+      [req.params.id, req.user.id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ message: 'Service not found in your shop' });
+    const old = existing.rows[0];
+    const result = await pool.query(
+      `UPDATE services
+       SET price=$1, duration_minutes=30, category=$2, is_active=$3
+       WHERE id=$4 AND barbershop_id=$5
+       RETURNING *`,
+      [
+        price !== undefined && price !== '' ? Number(price) : old.price,
+        category !== undefined ? normalizeCategory(category) : normalizeCategory(old.category),
+        is_active !== undefined ? (is_active === true || is_active === 'true') : old.is_active,
+        req.params.id,
+        req.user.id
+      ]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// SHOP OWNER: upload an image for a service in this shop
+router.post('/:id/image', authenticateBarbershop, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'Choose an image to upload' });
+    const imageUrl = `/uploads/${req.file.filename}`;
+    const result = await pool.query(
+      'UPDATE services SET image_url=$1 WHERE id=$2 AND barbershop_id=$3 RETURNING *',
+      [imageUrl, req.params.id, req.user.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ message: 'Service not found in your shop' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 module.exports = router;

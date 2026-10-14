@@ -23,26 +23,116 @@ const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilt
 // PUBLIC: list barbershops — only active + subscribed
 router.get('/', async (req, res) => {
   try {
-    const { search, city, specialty, max_price } = req.query;
+    const { search, city, specialty, category, min_price, max_price, min_rating, available, home_service, sort } = req.query;
+    const searchTerm = typeof search === 'string' ? search.trim() : '';
+    const cityTerm = typeof city === 'string' ? city.trim() : '';
+    const specialtyTerm = typeof specialty === 'string' ? specialty.trim() : '';
+    const categoryTerm = typeof category === 'string' ? category.trim() : '';
+    const minPrice = min_price === undefined || min_price === '' ? null : Number(min_price);
+    const maxPrice = max_price === undefined || max_price === '' ? null : Number(max_price);
+    const minRating = min_rating === undefined || min_rating === '' ? null : Number(min_rating);
+    if ([minPrice, maxPrice].some(value => value !== null && (!Number.isFinite(value) || value < 0))) {
+      return res.status(400).json({ message: 'Prices must be non-negative numbers' });
+    }
+    if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
+      return res.status(400).json({ message: 'Minimum price cannot exceed maximum price' });
+    }
+    if (minRating !== null && (!Number.isFinite(minRating) || minRating < 0 || minRating > 5)) {
+      return res.status(400).json({ message: 'Minimum rating must be between 0 and 5' });
+    }
+
     let query = `
       SELECT b.*,
         COALESCE(AVG(r.barbershop_rating), 0)::numeric(3,2) as avg_rating,
         COUNT(DISTINCT r.id) as review_count,
-        (SELECT MIN(price) FROM services WHERE barbershop_id = b.id AND is_active = true AND price IS NOT NULL) as min_price
+        shop_services.min_price
       FROM barbershops b
       LEFT JOIN ratings r ON r.barbershop_id = b.id
+      LEFT JOIN LATERAL (
+        SELECT MIN(price) as min_price
+        FROM services
+        WHERE barbershop_id = b.id AND is_active = true AND price IS NOT NULL
+      ) shop_services ON true
       WHERE b.is_active = true AND b.subscription_status = 'active'
     `;
     const params = [];
-    if (search) { params.push(`%${search}%`); query += ` AND b.name ILIKE $${params.length}`; }
-    if (city) { params.push(`%${city}%`); query += ` AND b.city ILIKE $${params.length}`; }
-    if (specialty) {
-      params.push(`%${specialty}%`);
-      query += ` AND b.id IN (SELECT bp.barbershop_id FROM barbers bp JOIN barber_specialties bs ON bs.barber_id = bp.id WHERE bs.specialty ILIKE $${params.length})`;
+    if (searchTerm) {
+      params.push(`%${searchTerm}%`);
+      query += ` AND (
+        b.name ILIKE $${params.length}
+        OR b.address ILIKE $${params.length}
+        OR b.city ILIKE $${params.length}
+        OR EXISTS (
+          SELECT 1 FROM services search_services
+          WHERE search_services.barbershop_id = b.id
+            AND search_services.is_active = true
+            AND (search_services.name ILIKE $${params.length} OR search_services.description ILIKE $${params.length})
+        )
+      )`;
     }
-    query += ' GROUP BY b.id';
-    if (max_price) { params.push(max_price); query += ` HAVING (SELECT MIN(price) FROM services WHERE barbershop_id = b.id AND is_active = true AND price IS NOT NULL) <= $${params.length}`; }
-    query += ' ORDER BY avg_rating DESC, review_count DESC';
+    if (cityTerm) {
+      params.push(`%${cityTerm}%`);
+      query += ` AND (b.city ILIKE $${params.length} OR b.address ILIKE $${params.length})`;
+    }
+    if (specialtyTerm) {
+      params.push(specialtyTerm);
+      query += ` AND EXISTS (
+        SELECT 1 FROM barbers bp
+        JOIN barber_specialties bs ON bs.barber_id = bp.id
+        WHERE bp.barbershop_id = b.id AND LOWER(bs.specialty) = LOWER($${params.length})
+      )`;
+    }
+    if (categoryTerm) {
+      params.push(categoryTerm);
+      query += ` AND EXISTS (
+        SELECT 1 FROM services category_services
+        WHERE category_services.barbershop_id = b.id
+          AND category_services.is_active = true
+          AND CASE LOWER(category_services.category)
+            WHEN 'coloring' THEN 'color'
+            ELSE LOWER(category_services.category)
+          END = LOWER($${params.length})
+      )`;
+    }
+    if (available === 'true') {
+      query += ` AND EXISTS (
+        SELECT 1 FROM barbers available_barbers
+        WHERE available_barbers.barbershop_id = b.id AND available_barbers.is_available = true
+      )`;
+    }
+    if (home_service === 'true') {
+      query += ` AND EXISTS (
+        SELECT 1 FROM services home_services
+        WHERE home_services.barbershop_id = b.id
+          AND home_services.is_active = true
+          AND home_services.is_home_service = true
+      )`;
+    }
+    if (minPrice !== null || maxPrice !== null) {
+      const priceConditions = ['filtered_services.barbershop_id = b.id', 'filtered_services.is_active = true', 'filtered_services.price IS NOT NULL'];
+      if (minPrice !== null) {
+        params.push(minPrice);
+        priceConditions.push(`filtered_services.price >= $${params.length}`);
+      }
+      if (maxPrice !== null) {
+        params.push(maxPrice);
+        priceConditions.push(`filtered_services.price <= $${params.length}`);
+      }
+      query += ` AND EXISTS (
+        SELECT 1 FROM services filtered_services
+        WHERE ${priceConditions.join(' AND ')}
+      )`;
+    }
+    query += ' GROUP BY b.id, shop_services.min_price';
+    const having = [];
+    if (minRating !== null) {
+      params.push(minRating);
+      having.push(`COALESCE(AVG(r.barbershop_rating), 0) >= $${params.length}`);
+    }
+    if (having.length) query += ` HAVING ${having.join(' AND ')}`;
+    if (sort === 'price_low') query += ' ORDER BY shop_services.min_price ASC NULLS LAST, avg_rating DESC';
+    else if (sort === 'price_high') query += ' ORDER BY shop_services.min_price DESC NULLS LAST, avg_rating DESC';
+    else query += ' ORDER BY avg_rating DESC, review_count DESC';
     const result = await pool.query(query, params);
     const rows = result.rows.map(r => { delete r.password; return r; });
     res.json(rows);
@@ -54,13 +144,20 @@ router.get('/me/dashboard', authenticateBarbershop, async (req, res) => {
   try {
     const shopId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
-    const [todayRes, totalRevRes, ratingRes, queueRes, monthlyRes, peakRes, topSvcRes] = await Promise.all([
+    const [todayRes, totalRevRes, ratingRes, queueRes, monthlyRes, peakRes, topSvcRes, promoImpactRes, barberPerformanceRes] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*) as count FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND status NOT IN ('cancelled','no_show')`,
+        `SELECT (
+          SELECT COUNT(*) FROM appointments
+          WHERE barbershop_id=$1 AND appointment_date=$2 AND status NOT IN ('cancelled','no_show')
+        ) + (
+          SELECT COUNT(*) FROM walk_ins
+          WHERE barbershop_id=$1 AND appointment_date=$2 AND status <> 'cancelled'
+        ) as count`,
         [shopId, today]
       ),
       pool.query(
-        `SELECT COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as revenue FROM appointments WHERE barbershop_id=$1`,
+        `SELECT COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as revenue
+         FROM appointments WHERE barbershop_id=$1 AND appointment_date <= CURRENT_DATE`,
         [shopId]
       ),
       pool.query(
@@ -68,7 +165,14 @@ router.get('/me/dashboard', authenticateBarbershop, async (req, res) => {
         [shopId]
       ),
       pool.query(
-        `SELECT COUNT(*) as count FROM appointments WHERE barbershop_id=$1 AND appointment_date=$2 AND status IN ('pending','confirmed','in_progress')`,
+        `SELECT (
+          SELECT COUNT(*) FROM appointments
+          WHERE barbershop_id=$1 AND appointment_date=$2 AND status IN ('pending','confirmed','in_progress')
+            AND COALESCE(is_event_booking, false) = false
+        ) + (
+          SELECT COUNT(*) FROM walk_ins
+          WHERE barbershop_id=$1 AND appointment_date=$2 AND status IN ('waiting','in_progress')
+        ) as count`,
         [shopId, today]
       ),
       pool.query(
@@ -83,6 +187,7 @@ router.get('/me/dashboard', authenticateBarbershop, async (req, res) => {
       pool.query(
         `SELECT EXTRACT(HOUR FROM appointment_time::time)::int as hour, COUNT(*)::int as count
          FROM appointments WHERE barbershop_id=$1 AND status NOT IN ('cancelled','no_show')
+           AND COALESCE(is_event_booking, false) = false
          GROUP BY hour ORDER BY hour`,
         [shopId]
       ),
@@ -91,6 +196,60 @@ router.get('/me/dashboard', authenticateBarbershop, async (req, res) => {
          FROM appointments a JOIN services s ON s.id=a.service_id
          WHERE a.barbershop_id=$1 AND a.status NOT IN ('cancelled','no_show')
          GROUP BY s.id, s.name ORDER BY count DESC LIMIT 5`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT p.id as promo_id, p.name, COUNT(r.id)::int as redemption_count,
+          COALESCE(SUM(r.points_spent), 0)::int as points_spent,
+          COALESCE(SUM(r.promo_value), 0)::float as promo_value_redeemed
+         FROM promo_redemptions r
+         JOIN loyalty_promos p ON p.id = r.promo_id
+         WHERE r.barbershop_id=$1
+         GROUP BY p.id, p.name
+         ORDER BY redemption_count DESC, p.name`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT b.id, b.name, b.photo_url,
+          (
+            SELECT COUNT(*) FROM appointments a
+            WHERE a.barber_id=b.id AND a.status='completed'
+          ) + (
+            SELECT COUNT(*) FROM walk_ins w
+            WHERE w.barber_id=b.id AND w.status='done'
+          ) AS cuts,
+          COALESCE((
+            SELECT AVG(r.barber_rating) FROM ratings r
+            WHERE r.barber_id=b.id AND r.barber_rating IS NOT NULL
+          ), 0)::numeric(3,2) AS avg_rating,
+          (
+            SELECT COUNT(*) FROM ratings r
+            WHERE r.barber_id=b.id AND r.barber_rating IS NOT NULL
+          )::int AS rating_count,
+          picked.service_name AS most_picked_service,
+          COALESCE(picked.booking_count, 0)::int AS most_picked_count
+         FROM barbers b
+         LEFT JOIN LATERAL (
+           SELECT services.service_name, SUM(services.booking_count)::int AS booking_count
+           FROM (
+             SELECT s.name AS service_name, COUNT(*)::int AS booking_count
+             FROM appointments a
+             JOIN services s ON s.id=a.service_id
+             WHERE a.barber_id=b.id AND a.status NOT IN ('cancelled','no_show')
+             GROUP BY s.name
+             UNION ALL
+             SELECT s.name AS service_name, COUNT(*)::int AS booking_count
+             FROM walk_ins w
+             JOIN services s ON s.id=w.service_id
+             WHERE w.barber_id=b.id AND w.status <> 'cancelled'
+             GROUP BY s.name
+           ) services
+           GROUP BY services.service_name
+           ORDER BY booking_count DESC, services.service_name
+           LIMIT 1
+         ) picked ON true
+         WHERE b.barbershop_id=$1
+         ORDER BY cuts DESC, avg_rating DESC, b.name`,
         [shopId]
       )
     ]);
@@ -101,7 +260,9 @@ router.get('/me/dashboard', authenticateBarbershop, async (req, res) => {
       queue_count: parseInt(queueRes.rows[0].count),
       monthly_revenue: monthlyRes.rows,
       peak_hours: peakRes.rows,
-      top_services: topSvcRes.rows
+      top_services: topSvcRes.rows,
+      promo_impact: promoImpactRes.rows,
+      barber_performance: barberPerformanceRes.rows
     });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
@@ -264,7 +425,7 @@ router.get('/:id', async (req, res) => {
         COALESCE(AVG(r.barber_rating), 0)::numeric(3,2) as avg_rating,
         ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties,
         ARRAY(
-          SELECT json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'duration_minutes', s.duration_minutes)
+          SELECT json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'duration_minutes', 30)
           FROM services s JOIN barber_services bs ON bs.service_id = s.id
           WHERE bs.barber_id = b.id AND s.is_active = true AND s.price IS NOT NULL
         ) as services

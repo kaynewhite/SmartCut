@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from './Layout';
 import api from '../../utils/api';
+import { formatDate, formatDateTime, formatTime } from '../../utils/time';
 import toast from 'react-hot-toast';
-import { Search, CheckCircle, XCircle, Trash2, ShieldOff, ShieldCheck, AlertTriangle, MessageSquare } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Trash2, ShieldOff, ShieldCheck, AlertTriangle, MessageSquare, Eye, X } from 'lucide-react';
+import { DetailsEmpty, DetailsGrid, DetailsSection, detailRecordStyle } from './DetailsView';
 
 const TABS = ['all', 'pending', 'active', 'restricted', 'appeals'];
 
@@ -21,6 +23,8 @@ export default function AdminBarbershops() {
   const [restrictReqs, setRestrictReqs] = useState('');
   const [appealModal, setAppealModal] = useState(null);
   const [appealNote, setAppealNote] = useState('');
+  const [shopDetails, setShopDetails] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   const fetchAll = async () => {
     try {
@@ -74,6 +78,19 @@ export default function AdminBarbershops() {
     } catch { toast.error('Failed to delete'); }
   };
 
+  const viewShopDetails = async (id) => {
+    setDetailsLoading(true);
+    setShopDetails(null);
+    try {
+      const res = await api.get(`/admin/barbershops/${id}/details`);
+      setShopDetails(res.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load barbershop details');
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
   const pendingCount = subs.filter(s => s.status === 'pending').length;
   const appealCount = appeals.length;
 
@@ -125,7 +142,7 @@ export default function AdminBarbershops() {
                   <div style={{ flex: 1 }}>
                     <div style={{ color: '#f0f0f0', fontWeight: 700, fontSize: 16 }}>{s.subscriber_name}</div>
                     <div style={{ color: '#8b92a9', fontSize: 13 }}>{s.subscriber_email}</div>
-                    <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 4 }}>Submitted: {new Date(s.created_at).toLocaleString()}</div>
+                    <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 4 }}>Submitted: {formatDateTime(s.created_at)}</div>
                   </div>
                   {s.payment_proof_url && <a href={s.payment_proof_url} target="_blank" rel="noreferrer"><img src={s.payment_proof_url} alt="proof" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid #1e2a3a' }} /></a>}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 180 }}>
@@ -199,6 +216,9 @@ export default function AdminBarbershops() {
                         <td style={{ padding: '12px 10px', color: '#8b92a9' }}>{s.total_appointments}</td>
                         <td style={{ padding: '12px 10px' }}>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <button onClick={() => viewShopDetails(s.id)} title="View full barbershop details" style={{ padding: '5px 10px', background: 'rgba(59,130,246,0.1)', border: '1px solid #3b82f6', color: '#60a5fa', borderRadius: 6, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Eye size={12} /> Details
+                            </button>
                             <button onClick={() => { setRestrictModal(s); setRestrictReason(s.restriction_reason || ''); setRestrictReqs(s.restriction_requirements || ''); }}
                               style={{ padding: '5px 10px', background: s.is_active ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', border: `1px solid ${s.is_active ? '#ef4444' : '#10b981'}`, color: s.is_active ? '#ef4444' : '#10b981', borderRadius: 6, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                               {s.is_active ? <><ShieldOff size={12} /> Restrict</> : <><ShieldCheck size={12} /> Lift</>}
@@ -287,6 +307,179 @@ export default function AdminBarbershops() {
               <button onClick={() => deleteShop(confirmDelete.id)} style={{ flex: 1, padding: 12, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Delete Permanently</button>
               <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, padding: 12, background: '#1e2a3a', color: '#8b92a9', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+      {(detailsLoading || shopDetails) && (
+        <div onClick={() => { setShopDetails(null); setDetailsLoading(false); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 14, padding: 22, maxWidth: 900, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <h2 style={{ color: '#f0f0f0', fontSize: 18, margin: 0 }}>{shopDetails?.profile?.name || 'Barbershop Details'}</h2>
+              <button onClick={() => { setShopDetails(null); setDetailsLoading(false); }} aria-label="Close details" style={{ background: 'none', border: 0, color: '#8b92a9', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            {detailsLoading && <div style={{ color: '#8b92a9', padding: 24, textAlign: 'center' }}>Loading barbershop details...</div>}
+            {shopDetails && (
+              <>
+                <DetailsSection title="Barbershop Profile">
+                  <DetailsGrid items={[
+                    ['Barbershop ID', shopDetails.profile.id],
+                    ['Email', shopDetails.profile.email],
+                    ['Phone', shopDetails.profile.phone],
+                    ['Address', [shopDetails.profile.address, shopDetails.profile.city].filter(Boolean).join(', ') || '—'],
+                    ['Description', shopDetails.profile.description],
+                    ['Opening hours', shopDetails.profile.opening_time && shopDetails.profile.closing_time ? `${shopDetails.profile.opening_time} – ${shopDetails.profile.closing_time}` : '—'],
+                    ['Subscription status', shopDetails.profile.subscription_status],
+                    ['Account status', shopDetails.profile.is_active ? 'Active' : 'Restricted'],
+                    ['Rating', Number(shopDetails.profile.rating || 0).toFixed(1)],
+                    ['Downpayment', `${shopDetails.profile.downpayment_percent || 0}%`],
+                    ['Solo operator', shopDetails.profile.is_solo ? 'Yes' : 'No'],
+                    ['Created', formatDateTime(shopDetails.profile.created_at)],
+                    ['Coordinates', shopDetails.profile.latitude && shopDetails.profile.longitude ? `${shopDetails.profile.latitude}, ${shopDetails.profile.longitude}` : '—'],
+                    ['Restriction reason', shopDetails.profile.restriction_reason],
+                    ['Restriction requirements', shopDetails.profile.restriction_requirements],
+                    ['Appeal status', shopDetails.profile.appeal_status],
+                    ['Appeal text', shopDetails.profile.appeal_text],
+                  ]} />
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+                    {shopDetails.profile.logo_url && <a href={shopDetails.profile.logo_url} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', fontSize: 12 }}>View logo</a>}
+                    {shopDetails.profile.cover_url && <a href={shopDetails.profile.cover_url} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', fontSize: 12 }}>View cover image</a>}
+                    {shopDetails.profile.qr_code_url && <a href={shopDetails.profile.qr_code_url} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', fontSize: 12 }}>View shop payment QR</a>}
+                  </div>
+                </DetailsSection>
+                <DetailsSection title={`Subscription History (${shopDetails.subscriptions.length})`}>
+                  {shopDetails.subscriptions.length ? shopDetails.subscriptions.map(sub => (
+                    <div key={sub.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Status', sub.status],
+                        ['Submitted', formatDateTime(sub.created_at)],
+                        ['Expires', sub.expires_at ? formatDateTime(sub.expires_at) : '—'],
+                        ['Admin note', sub.admin_note],
+                      ]} />
+                      {sub.payment_proof_url && <a href={sub.payment_proof_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#60a5fa', fontSize: 12 }}>View payment proof</a>}
+                    </div>
+                  )) : <DetailsEmpty />}
+                </DetailsSection>
+                <DetailsSection title={`Barbers (${shopDetails.barbers.length})`}>
+                  {shopDetails.barbers.length ? shopDetails.barbers.map(barber => (
+                    <div key={barber.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Name', barber.name],
+                        ['Email', barber.email],
+                        ['Phone', barber.phone],
+                        ['Bio', barber.bio],
+                        ['Availability', barber.is_available ? 'Available' : 'Unavailable'],
+                        ['Rating', Number(barber.rating || 0).toFixed(1)],
+                        ['Total cuts', barber.total_cuts],
+                        ['Specialties', barber.specialties?.join(', ') || '—'],
+                        ['Joined', formatDateTime(barber.created_at)],
+                      ]} />
+                      {barber.photo_url && <a href={barber.photo_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#60a5fa', fontSize: 12 }}>View barber photo</a>}
+                    </div>
+                  )) : <DetailsEmpty>No barbers found.</DetailsEmpty>}
+                </DetailsSection>
+                <DetailsSection title={`Services (${shopDetails.services.length})`}>
+                  {shopDetails.services.length ? shopDetails.services.map(service => (
+                    <div key={service.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Service', service.name],
+                        ['Description', service.description],
+                        ['Price', service.price === null ? '—' : `₱${Number(service.price).toLocaleString()}`],
+                        ['Duration', `${service.duration_minutes || 30} minutes`],
+                        ['Category', service.category],
+                        ['Status', service.is_active ? 'Active' : 'Inactive'],
+                        ['Home service', service.is_home_service ? 'Yes' : 'No'],
+                        ['Created', formatDateTime(service.created_at)],
+                      ]} />
+                      {service.image_url && <a href={service.image_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#60a5fa', fontSize: 12 }}>View service image</a>}
+                    </div>
+                  )) : <DetailsEmpty>No services found.</DetailsEmpty>}
+                </DetailsSection>
+                <DetailsSection title={`Payment Methods (${shopDetails.payment_methods.length})`}>
+                  {shopDetails.payment_methods.length ? shopDetails.payment_methods.map(method => (
+                    <div key={method.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Type', method.type],
+                        ['Account name', method.account_name],
+                        ['Account number', method.account_number],
+                        ['Status', method.is_active ? 'Active' : 'Inactive'],
+                        ['Added', formatDateTime(method.created_at)],
+                      ]} />
+                      {method.qr_code_url && <a href={method.qr_code_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#60a5fa', fontSize: 12 }}>View payment QR</a>}
+                    </div>
+                  )) : <DetailsEmpty>No payment methods found.</DetailsEmpty>}
+                </DetailsSection>
+                <DetailsSection title={`Appointments (${shopDetails.appointments.length})`}>
+                  {shopDetails.appointments.length ? shopDetails.appointments.map(appt => (
+                    <div key={appt.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Booking', `#${appt.id} · Queue ${appt.queue_number ?? '—'}`],
+                        ['Date & time', `${formatDate(appt.appointment_date)} · ${formatTime(appt.appointment_time)}`],
+                        ['Customer', `${appt.customer_name || '—'}${appt.customer_email ? ` · ${appt.customer_email}` : ''}`],
+                        ['Customer phone', appt.customer_phone],
+                        ['Barber', appt.barber_name],
+                        ['Service', appt.service_name],
+                        ['Status', appt.status],
+                        ['Payment', `${appt.payment_status} · ₱${Number(appt.total_amount || 0).toLocaleString()}`],
+                        ['Home service', appt.is_home_service ? appt.home_address || 'Yes' : 'No'],
+                        ['Notes', appt.notes],
+                        ['Booked at', formatDateTime(appt.created_at)],
+                      ]} />
+                      {appt.payment_proof_url && <a href={appt.payment_proof_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#60a5fa', fontSize: 12 }}>View payment proof</a>}
+                    </div>
+                  )) : <DetailsEmpty>No appointments found.</DetailsEmpty>}
+                </DetailsSection>
+                <DetailsSection title={`Walk-ins (${shopDetails.walk_ins.length})`}>
+                  {shopDetails.walk_ins.length ? shopDetails.walk_ins.map(walkIn => (
+                    <div key={walkIn.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Walk-in', `#${walkIn.id} · Queue ${walkIn.queue_number ?? '—'}`],
+                        ['Customer name', walkIn.customer_name],
+                        ['Date & time', `${formatDate(walkIn.appointment_date)} · ${formatTime(walkIn.appointment_time)}`],
+                        ['Barber', walkIn.barber_name],
+                        ['Service', walkIn.service_name],
+                        ['Duration', `${walkIn.duration_minutes || 30} minutes`],
+                        ['Status', walkIn.status],
+                        ['Created', formatDateTime(walkIn.created_at)],
+                      ]} />
+                    </div>
+                  )) : <DetailsEmpty>No walk-ins found.</DetailsEmpty>}
+                </DetailsSection>
+                <DetailsSection title={`Loyalty Promos (${shopDetails.promos.length})`}>
+                  {shopDetails.promos.length ? shopDetails.promos.map(promo => (
+                    <div key={promo.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Promo', promo.name],
+                        ['Description', promo.description],
+                        ['Points cost', promo.points_cost],
+                        ['Real price', `₱${Number(promo.real_price || 0).toLocaleString()}`],
+                        ['Status', promo.is_active ? 'Active' : 'Inactive'],
+                        ['Assigned barber', promo.barber_name],
+                        ['Service', promo.service_name],
+                        ['Redemptions', promo.redemption_count],
+                        ['Points spent', promo.points_spent],
+                        ['Value redeemed', `₱${Number(promo.promo_value_redeemed || 0).toLocaleString()}`],
+                      ]} />
+                      {promo.image_url && <a href={promo.image_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, color: '#60a5fa', fontSize: 12 }}>View promo image</a>}
+                    </div>
+                  )) : <DetailsEmpty>No promos found.</DetailsEmpty>}
+                </DetailsSection>
+                <DetailsSection title={`Ratings & Reviews (${shopDetails.ratings.length})`}>
+                  {shopDetails.ratings.length ? shopDetails.ratings.map(rating => (
+                    <div key={rating.id} style={detailRecordStyle}>
+                      <DetailsGrid items={[
+                        ['Customer', rating.customer_name],
+                        ['Barber', rating.barber_name],
+                        ['Barbershop rating', rating.barbershop_rating],
+                        ['Barber rating', rating.barber_rating],
+                        ['Comment', rating.comment],
+                        ['Appointment ID', rating.appointment_id],
+                        ['Submitted', formatDateTime(rating.created_at)],
+                      ]} />
+                    </div>
+                  )) : <DetailsEmpty>No ratings found.</DetailsEmpty>}
+                </DetailsSection>
+              </>
+            )}
           </div>
         </div>
       )}

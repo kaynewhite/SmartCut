@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Plus, CheckCircle, PlayCircle, RefreshCw, X, Users, Clock } from 'lucide-react';
+import { Plus, CheckCircle, PlayCircle, RefreshCw, X, Clock } from 'lucide-react';
 import styles from './Queue.module.css';
 import { formatTime, formatQueueNumber } from '../../utils/time';
 
@@ -11,12 +11,20 @@ const REFRESH_INTERVAL = 20000;
 export default function BarbershopQueue() {
   const [queue, setQueue] = useState({ walk_ins: [], appointments: [] });
   const [services, setServices] = useState([]);
+  const [barberServices, setBarberServices] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addModal, setAddModal] = useState(false);
-  const [form, setForm] = useState({ customer_name: '', service_id: '', barber_id: '' });
+  const [form, setForm] = useState({ customer_name: '', service_id: '', barber_id: '', appointment_date: '', appointment_time: '' });
   const [shopId, setShopId] = useState(null);
+  const [shopHours, setShopHours] = useState({ opening_time: '08:00', closing_time: '20:00' });
+  const [bookedSlots, setBookedSlots] = useState([]);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const todayDate = new Date().toISOString().split('T')[0];
+  const lastBookableDate = new Date();
+  lastBookableDate.setUTCDate(lastBookableDate.getUTCDate() + 30);
+  const maxBookableDate = lastBookableDate.toISOString().split('T')[0];
 
   const fetchQueue = async (id) => {
     const sid = id || shopId;
@@ -33,6 +41,10 @@ export default function BarbershopQueue() {
       const profileRes = await api.get('/barbershops/me/profile');
       const id = profileRes.data.id;
       setShopId(id);
+      setShopHours({
+        opening_time: profileRes.data.opening_time?.substring(0, 5) || '08:00',
+        closing_time: profileRes.data.closing_time?.substring(0, 5) || '20:00'
+      });
       const [qRes, sRes, bRes] = await Promise.all([
         api.get(`/queue/${id}`),
         api.get('/services/me'),
@@ -55,28 +67,83 @@ export default function BarbershopQueue() {
   }, []);
 
   const openAddModal = () => {
-    setForm({ customer_name: '', service_id: '', barber_id: '' });
+    setForm({
+      customer_name: '',
+      service_id: '',
+      barber_id: '',
+      appointment_date: todayDate,
+      appointment_time: ''
+    });
     setAddModal(true);
   };
 
   const handleBarberChange = (barber_id) => {
-    setForm(p => ({ ...p, barber_id, service_id: '' }));
+    setForm(p => ({ ...p, barber_id, service_id: '', appointment_time: '' }));
   };
 
-  const filteredServices = form.barber_id
-    ? services.filter(s => !s.created_by_barber_id || String(s.created_by_barber_id) === String(form.barber_id))
-    : services;
+  useEffect(() => {
+    if (!form.barber_id) {
+      setBarberServices(services.filter(service => service.is_active && service.price !== null));
+      setServicesLoading(false);
+      return;
+    }
+    let active = true;
+    setServicesLoading(true);
+    api.get(`/services/by-barber/${form.barber_id}`)
+      .then(res => { if (active) setBarberServices(res.data || []); })
+      .catch(() => { if (active) { setBarberServices([]); toast.error('Could not load this barber’s services'); } })
+      .finally(() => { if (active) setServicesLoading(false); });
+    return () => { active = false; };
+  }, [form.barber_id, services]);
+
+  const filteredServices = barberServices;
+
+  useEffect(() => {
+    if (!addModal || !shopId || !form.appointment_date) return;
+    if (form.appointment_date > maxBookableDate) {
+      setBookedSlots([]);
+      return;
+    }
+    let active = true;
+    setBookedSlots([]);
+    api.get('/appointments/available-slots', {
+      params: {
+        barbershop_id: shopId,
+        barber_id: form.barber_id || undefined,
+        date: form.appointment_date,
+      }
+    }).then(res => {
+      if (active) setBookedSlots(res.data.booked_slots || []);
+    }).catch(() => {
+      if (active) toast.error('Could not load available walk-in times');
+    });
+    return () => { active = false; };
+  }, [addModal, shopId, form.appointment_date, form.barber_id, maxBookableDate]);
+
+  const walkInSlots = () => {
+    const [openHour, openMinute] = shopHours.opening_time.split(':').map(Number);
+    const [closeHour, closeMinute] = shopHours.closing_time.split(':').map(Number);
+    const open = openHour * 60 + openMinute;
+    const close = closeHour * 60 + closeMinute;
+    const slots = [];
+    for (let start = open; start + 30 <= close; start += 30) {
+      slots.push(`${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`);
+    }
+    return slots;
+  };
+  const availableWalkInSlots = walkInSlots().filter(time => !bookedSlots.includes(time));
 
   const addWalkIn = async (e) => {
     e.preventDefault();
     if (!form.customer_name.trim()) return toast.error('Customer name required');
+    if (!form.appointment_time) return toast.error('Select an available session time');
     try {
       await api.post('/queue', form);
-      toast.success('Walk-in added to queue!');
+      toast.success('Walk-in session scheduled!');
       setAddModal(false);
-      setForm({ customer_name: '', service_id: '', barber_id: '' });
+      setForm({ customer_name: '', service_id: '', barber_id: '', appointment_date: '', appointment_time: '' });
       fetchQueue();
-    } catch { toast.error('Failed'); }
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to schedule walk-in'); }
   };
 
   const updateStatus = async (id, status) => {
@@ -92,6 +159,11 @@ export default function BarbershopQueue() {
   const inProgress =
     queue.walk_ins.filter(w => w.status === 'in_progress').length +
     queue.appointments.filter(a => a.status === 'in_progress').length;
+  const queueEntries = [
+    ...queue.appointments.map(entry => ({ ...entry, entryType: 'online' })),
+    ...queue.walk_ins.map(entry => ({ ...entry, entryType: 'walk_in' }))
+  ].sort((a, b) => String(a.appointment_time).localeCompare(String(b.appointment_time)) ||
+    Number(a.queue_number) - Number(b.queue_number));
 
   return (
     <Layout>
@@ -100,7 +172,7 @@ export default function BarbershopQueue() {
           <div>
             <h1>Queue Management</h1>
             <div style={{ fontSize: 12, color: '#4b5563', marginTop: 2 }}>
-              Auto-refreshes every 20s · Last: {formatTime(lastRefresh.toTimeString().substring(0,5))}
+              Polls every 20s · Last: {formatTime(lastRefresh.toTimeString().substring(0,5))}
             </div>
           </div>
           <div className={styles.headerBtns}>
@@ -129,68 +201,44 @@ export default function BarbershopQueue() {
         </div>
 
         <div className={styles.sections}>
-          {/* Appointment Queue */}
           <div className={styles.section}>
-            <h2>Booked Appointments <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queue.appointments.length})</span></h2>
-            {queue.appointments.length === 0 ? (
-              <div className={styles.empty}>No appointments in queue right now</div>
+            <h2>Today's Sessions <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queueEntries.length})</span></h2>
+            {queueEntries.length === 0 ? (
+              <div className={styles.empty}>No sessions scheduled · <button onClick={openAddModal} style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', fontWeight: 600, padding: 0 }}>Add a walk-in</button></div>
             ) : (
-              queue.appointments.map(a => (
-                <div key={a.id} className={`${styles.item} ${a.status === 'in_progress' ? styles.inProg : ''}`}>
-                  <div className={styles.qNum} title={`Queue ${formatQueueNumber(a.queue_number)}`}>
-                    {formatQueueNumber(a.position)}
+              queueEntries.map(entry => (
+                <div key={`${entry.entryType}-${entry.id}`} className={`${styles.item} ${entry.status === 'in_progress' ? styles.inProg : ''}`}>
+                  <div className={styles.qNum} title={`Queue ${formatQueueNumber(entry.queue_number)}`}>
+                    {formatQueueNumber(entry.queue_number)}
                   </div>
                   <div className={styles.itemInfo}>
-                    <div className={styles.itemName}>
-                      {a.customer_name || `Customer ${formatQueueNumber(a.position)}`}
-                    </div>
+                    <div className={styles.itemName}>{entry.customer_name || 'Customer'}</div>
                     <div className={styles.itemMeta}>
-                      {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''} · {formatTime(a.appointment_time?.substring(0,5))}
-                      {a.duration_minutes && <span style={{ color: '#4b5563' }}> · {a.duration_minutes} min</span>}
+                      {entry.service_name || 'Walk-in'}{entry.barber_name ? ` · ${entry.barber_name}` : ''} · {formatTime(entry.appointment_time)}
+                      <span style={{ color: '#4b5563' }}> · 30 min</span>
                     </div>
                   </div>
-                  <span className={`badge ${a.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
-                    {a.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
+                  <span className={`badge ${entry.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
+                    {entry.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
                   </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Walk-in Queue */}
-          <div className={styles.section}>
-            <h2>Walk-ins <span style={{ fontSize: 13, color: '#8b92a9', fontWeight: 400 }}>({queue.walk_ins.length})</span></h2>
-            {queue.walk_ins.length === 0 ? (
-              <div className={styles.empty}>No walk-ins · <button onClick={openAddModal} style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', fontWeight: 600, padding: 0 }}>Add one</button></div>
-            ) : (
-              queue.walk_ins.map(w => (
-                <div key={w.id} className={`${styles.item} ${w.status === 'in_progress' ? styles.inProg : ''}`}>
-                  <div className={styles.qNum}>{formatQueueNumber(w.position)}</div>
-                  <div className={styles.itemInfo}>
-                    <div className={styles.itemName}>{w.customer_name}</div>
-                    <div className={styles.itemMeta}>
-                      {w.service_name || 'Walk-in'}{w.barber_name ? ` · ${w.barber_name}` : ''}
-                      {w.duration_minutes && <span style={{ color: '#4b5563' }}> · {w.duration_minutes} min</span>}
-                    </div>
-                  </div>
-                  <div className={styles.itemActions}>
-                    <span className={`badge ${w.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
-                      {w.status === 'in_progress' ? '✂️ In Progress' : 'Waiting'}
-                    </span>
-                    {w.status === 'waiting' && (
-                      <button className={styles.startBtn} onClick={() => updateStatus(w.id, 'in_progress')} title="Start service">
+                  <span className={`badge ${entry.entryType === 'walk_in' ? 'badge-warning' : 'badge-info'}`}>
+                    {entry.entryType === 'walk_in' ? 'Walk-in' : 'Online'}
+                  </span>
+                  {entry.entryType === 'walk_in' && <div className={styles.itemActions}>
+                    {entry.status === 'waiting' && (
+                      <button className={styles.startBtn} onClick={() => updateStatus(entry.id, 'in_progress')} title="Start service">
                         <PlayCircle size={14} />
                       </button>
                     )}
-                    {w.status === 'in_progress' && (
-                      <button className={styles.doneBtn} onClick={() => updateStatus(w.id, 'done')} title="Mark done">
+                    {entry.status === 'in_progress' && (
+                      <button className={styles.doneBtn} onClick={() => updateStatus(entry.id, 'done')} title="Mark done">
                         <CheckCircle size={14} />
                       </button>
                     )}
-                    <button onClick={() => updateStatus(w.id, 'cancelled')} title="Remove from queue" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: '2px 4px' }}>
+                    <button onClick={() => updateStatus(entry.id, 'cancelled')} title="Remove from queue" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: '2px 4px' }}>
                       <X size={14} />
                     </button>
-                  </div>
+                  </div>}
                 </div>
               ))
             )}
@@ -219,13 +267,45 @@ export default function BarbershopQueue() {
                 </div>
                 <div className={styles.field}>
                   <label>Service {form.barber_id && <span style={{ color: '#d4af37', fontSize: 11 }}>(filtered)</span>}</label>
-                  <select className={styles.input} value={form.service_id} onChange={e => setForm(p => ({ ...p, service_id: e.target.value }))}>
-                    <option value="">No specific service</option>
+                  <select className={styles.input} value={form.service_id} onChange={e => setForm(p => ({ ...p, service_id: e.target.value }))} disabled={servicesLoading}>
+                    <option value="">{servicesLoading ? 'Loading barber services…' : 'No specific service'}</option>
                     {filteredServices.map(s => <option key={s.id} value={s.id}>{s.name} — ₱{parseFloat(s.price || 0).toFixed(0)}</option>)}
                   </select>
                   {form.barber_id && filteredServices.length === 0 && (
                     <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>No services for this barber. Try "Any barber".</div>
                   )}
+                </div>
+                <div className={styles.field}>
+                  <label>Session Date *</label>
+                  <input
+                    className={`${styles.input} ${styles.walkInDate}`}
+                    type="date"
+                    min={todayDate}
+                    max={maxBookableDate}
+                    value={form.appointment_date}
+                    onChange={e => setForm(p => ({ ...p, appointment_date: e.target.value, appointment_time: '' }))}
+                    required
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label>30-minute Session Time *</label>
+                  <div className={styles.timeSlots} role="group" aria-label="Available session times">
+                    {form.appointment_date && availableWalkInSlots.map(time => (
+                      <button
+                        key={time}
+                        type="button"
+                        className={`${styles.timeSlot} ${form.appointment_time === time ? styles.selectedTimeSlot : ''}`}
+                        aria-pressed={form.appointment_time === time}
+                        onClick={() => setForm(p => ({ ...p, appointment_time: time }))}
+                      >
+                        {formatTime(time)}
+                      </button>
+                    ))}
+                    {form.appointment_date && availableWalkInSlots.length === 0 && (
+                      <span className={styles.noAvailableTimes}>No available times for this date.</span>
+                    )}
+                    {!form.appointment_date && <span className={styles.noAvailableTimes}>Choose a date to see available times.</span>}
+                  </div>
                 </div>
                 <div className={styles.modalActions}>
                   <button className={styles.saveBtn} type="submit">Add to Queue</button>

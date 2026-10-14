@@ -13,7 +13,7 @@ export default function BarbershopBarbers() {
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '' });
+  const [form, setForm] = useState({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '', event_price: '0' });
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [specInput, setSpecInput] = useState('');
@@ -24,13 +24,13 @@ export default function BarbershopBarbers() {
   useEffect(() => { fetchBarbers(); }, []);
 
   const openAdd = () => {
-    setForm({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '' });
+    setForm({ name: '', phone: '', bio: '', specialties: [], is_available: true, email: '', password: '', event_price: '0' });
     setPhotoFile(null);
     setSpecInput('');
     setModal('add');
   };
   const openEdit = (b) => {
-    setForm({ name: b.name, phone: b.phone || '', bio: b.bio || '', specialties: b.specialties?.filter(Boolean) || [], is_available: b.is_available, email: b.email || '', password: '' });
+    setForm({ name: b.name, phone: b.phone || '', bio: b.bio || '', specialties: b.specialties?.filter(Boolean) || [], is_available: b.is_available, email: b.email || '', password: '', event_price: String(b.event_price || 0) });
     setPhotoFile(null);
     setSpecInput('');
     setModal(b.id);
@@ -55,6 +55,7 @@ export default function BarbershopBarbers() {
       fd.append('bio', form.bio || '');
       fd.append('specialties', form.specialties.join(','));
       fd.append('is_available', form.is_available);
+      fd.append('event_price', form.event_price);
       if (form.email) fd.append('email', form.email);
       if (form.password) fd.append('password', form.password);
       if (photoFile) fd.append('photo', photoFile);
@@ -111,6 +112,9 @@ export default function BarbershopBarbers() {
                 <div className={styles.info}>
                   <div className={styles.name}>{b.name}</div>
                   <div className={styles.rating}><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(b.avg_rating||0).toFixed(1)} · {b.total_cuts} cuts</div>
+                  <div style={{fontSize:12,color:'#8b92a9',marginBottom:6}}>
+                    Event rate: {Number(b.event_price) > 0 ? `₱${Number(b.event_price).toFixed(2)}` : 'Not set'}
+                  </div>
                   {b.email && <div style={{fontSize:11,color:'#8b92a9',display:'flex',alignItems:'center',gap:4,marginTop:2}}><Mail size={11}/>{b.email}{b.has_account ? <span style={{color:'#16a34a',marginLeft:4}}>✓ Account</span> : null}</div>}
                   {b.phone && <div className={styles.phone}>{b.phone}</div>}
                   {b.bio && <div className={styles.bio}>{b.bio}</div>}
@@ -138,6 +142,12 @@ export default function BarbershopBarbers() {
                 <div className={styles.field}><label>Name *</label><input className={styles.input} value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} required /></div>
                 <div className={styles.field}><label>Phone</label><input className={styles.input} value={form.phone} onChange={e => setForm(p => ({...p, phone: e.target.value}))} placeholder="09XX XXX XXXX" /></div>
                 <div className={styles.field}><label>Bio</label><textarea className={styles.textarea} value={form.bio} onChange={e => setForm(p => ({...p, bio: e.target.value}))} rows={2} /></div>
+                <div className={styles.field}>
+                  <label>Full-day event rate (₱)</label>
+                  <input className={styles.input} type="number" min="0" step="0.01" value={form.event_price}
+                    onChange={e => setForm(p => ({ ...p, event_price: e.target.value }))} required />
+                  <small style={{ color: '#8b92a9' }}>Set to 0 to disable event bookings for this barber.</small>
+                </div>
                 <div className={styles.field}>
                   <label><Upload size={12} style={{display:'inline',marginRight:4}}/>Photo</label>
                   <input type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files[0])} className={styles.input} />

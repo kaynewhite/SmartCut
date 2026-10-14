@@ -9,18 +9,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-export const SINILOAN_CENTER = [14.413480043065805, 121.44852231660464];
+export const SINILOAN_CENTER = [14.4232089, 121.4452652];
 export const DEFAULT_ZOOM = 17;
-
-const RecenterOnChange = ({ center, zoom }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (!map || !center) return;
-    map.setView(center, zoom || map.getZoom(), { animate: true });
-    setTimeout(() => map.invalidateSize(), 100);
-  }, [center?.[0], center?.[1]]);
-  return null;
-};
 
 const InvalidateOnMount = () => {
   const map = useMap();
@@ -42,8 +32,22 @@ const ClickToSet = ({ setPosition }) => {
   return null;
 };
 
+const SyncMapView = ({ points, selectedLocation, zoom }) => {
+  const map = useMap();
+  const pointsKey = points.map(point => point.join(',')).join('|');
+  useEffect(() => {
+    if (points.length > 1) {
+      map.fitBounds(points, { padding: [24, 24], maxZoom: zoom });
+    } else if (points.length === 1) {
+      map.setView(points[0], zoom);
+    } else if (selectedLocation) {
+      map.setView(selectedLocation, zoom);
+    }
+  }, [map, pointsKey, selectedLocation?.[0], selectedLocation?.[1], zoom]);
+  return null;
+};
+
 export default function Map({
-  center = SINILOAN_CENTER,
   zoom = DEFAULT_ZOOM,
   markers = [],
   onLocationSelect,
@@ -52,10 +56,18 @@ export default function Map({
   interactive = true,
   onMarkerClick
 }) {
+  const validMarkers = markers.map(marker => ({
+    marker,
+    point: [Number(marker.latitude), Number(marker.longitude)]
+  })).filter(({ point }) => point.every(Number.isFinite) &&
+    (point[0] !== 0 || point[1] !== 0));
+  const points = validMarkers.map(({ point }) => point);
+  const initialCenter = selectedLocation || points[0] || SINILOAN_CENTER;
+
   return (
     <div style={{ height, width: '100%', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
       <MapContainer
-        center={center}
+        center={initialCenter}
         zoom={zoom}
         style={{ height: '100%', width: '100%' }}
         scrollWheelZoom={interactive}
@@ -63,18 +75,19 @@ export default function Map({
         zoomControl={interactive}
       >
         <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+          url="https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png"
+          subdomains="abc"
           maxZoom={19}
         />
 
         <InvalidateOnMount />
-        <RecenterOnChange center={center} zoom={zoom} />
+        <SyncMapView points={points} selectedLocation={selectedLocation} zoom={zoom} />
 
-        {markers.filter(m => m.latitude && m.longitude).map((marker, index) => (
+        {validMarkers.map(({ marker, point }, index) => (
           <Marker
             key={marker.id || index}
-            position={[parseFloat(marker.latitude), parseFloat(marker.longitude)]}
+            position={point}
             eventHandlers={{
               click: () => onMarkerClick && onMarkerClick(marker)
             }}

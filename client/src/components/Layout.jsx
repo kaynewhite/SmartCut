@@ -28,8 +28,8 @@ export default function Layout({ children }) {
   const isSolo = isShop && !!user?.is_solo;
 
   const customerLinks = [
-    { to: '/customer/dashboard', icon: <Home size={18} />, label: 'Home' },
-    { to: '/customer/explore', icon: <Scissors size={18} />, label: 'Explore' },
+    { to: '/customer/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
+    { to: '/customer/explore', icon: <Scissors size={18} />, label: 'For You' },
     { to: '/customer/appointments', icon: <Calendar size={18} />, label: 'Appointments' },
     { to: '/customer/history', icon: <Clock size={18} />, label: 'History' },
     { to: '/customer/profile', icon: <User size={18} />, label: 'Profile' },

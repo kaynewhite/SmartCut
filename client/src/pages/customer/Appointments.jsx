@@ -13,6 +13,7 @@ const STATUS_LABEL = { pending: 'Pending', confirmed: 'Confirmed', in_progress: 
 const TYPE_META = {
   online: { label: 'In-Store', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
   home_service: { label: 'Home Service', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
+  home_event: { label: 'Home Event', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
 };
 
 const PM_COLORS = {
@@ -49,7 +50,7 @@ export default function CustomerAppointments() {
     setLoading(false);
   };
 
-  const typeOf = (a) => a.is_home_service ? 'home_service' : 'online';
+  const typeOf = (a) => a.is_event_booking ? 'home_event' : a.is_home_service ? 'home_service' : 'online';
 
   const filtered = appointments.filter(a => {
     const statusMatch =
@@ -166,7 +167,7 @@ export default function CustomerAppointments() {
             <div className={styles.empty}>
               <Scissors size={40} color="#374151" />
               <p>No appointments found.</p>
-              <Link to="/customer/explore" className={styles.bookBtn}>Book Now</Link>
+              <Link to="/customer/dashboard" className={styles.bookBtn}>Book Now</Link>
             </div>
           ) : (
             <div className={styles.list}>
@@ -189,18 +190,21 @@ export default function CustomerAppointments() {
                     </div>
 
                     <div className={styles.details}>
-                      <div className={styles.detail}><Scissors size={14} /> {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''}</div>
+                      <div className={styles.detail}><Scissors size={14} /> {a.is_event_booking ? `Full-day event booking · ${a.barber_name || 'Barber'}` : `${a.service_name}${a.barber_name ? ` · ${a.barber_name}` : ''}`}</div>
                       <div className={styles.detail}><Calendar size={14} /> {new Date(a.appointment_date).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                      <div className={styles.detail}>
-                        <Clock size={14} /> {formatTime(a.appointment_time?.substring(0, 5))}
+                      {!a.is_event_booking && <div className={styles.detail}>
+                        <Clock size={14} /> {formatTime(a.appointment_time)}
                         {a.queue_number && ['pending','confirmed','in_progress'].includes(a.status) && (
                           <span style={{ marginLeft: 8, padding: '1px 8px', background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 4, color: '#d4af37', fontSize: 11, fontWeight: 600 }}>
                             Queue {formatQueueNumber(a.queue_number)}
                           </span>
                         )}
-                      </div>
+                      </div>}
                       {a.is_home_service && a.home_address && (
                         <div className={styles.detail}><Home size={14} color="#8b5cf6" /> <span style={{ color: '#8b5cf6' }}>{a.home_address}</span></div>
+                      )}
+                      {a.is_home_service && a.home_contact_phone && (
+                        <div className={styles.detail}><span>Contact: {a.home_contact_name ? `${a.home_contact_name} · ` : ''}{a.home_contact_phone}</span></div>
                       )}
                       <div className={styles.detail}>
                         <span className={styles.price}>₱{parseFloat(a.total_amount || 0).toFixed(0)}</span>

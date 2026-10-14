@@ -4,14 +4,13 @@ import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
 import { Edit2, Save, Upload, ToggleLeft, ToggleRight, Briefcase, AlertCircle } from 'lucide-react';
 import styles from './Services.module.css';
-
-const CATEGORIES = ['haircut', 'beard', 'shave', 'massage', 'coloring', 'treatment', 'other'];
+import { SERVICE_CATEGORIES, normalizeServiceCategory } from '../../constants/serviceCategories';
 
 export default function BarbershopServices() {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ price: '', duration_minutes: 30, category: 'haircut' });
+  const [form, setForm] = useState({ price: '', category: 'haircut' });
   const [saving, setSaving] = useState(false);
 
   const fetchServices = () => {
@@ -26,8 +25,7 @@ export default function BarbershopServices() {
     setEditing(s.id);
     setForm({
       price: s.price ?? '',
-      duration_minutes: s.duration_minutes || 30,
-      category: s.category || 'haircut',
+      category: normalizeServiceCategory(s.category) || 'haircut',
     });
   };
 
@@ -37,7 +35,6 @@ export default function BarbershopServices() {
     try {
       await api.put(`/services/${s.id}`, {
         price: form.price,
-        duration_minutes: form.duration_minutes,
         category: form.category,
       });
       toast.success('Saved');
@@ -106,27 +103,23 @@ export default function BarbershopServices() {
                     </div>
                     {s.description && <div className={styles.desc}>{s.description}</div>}
                     {editing === s.id ? (
-                      <div style={{display:'grid',gridTemplateColumns:'120px 110px 130px',gap:8,marginTop:10,alignItems:'end'}}>
+                      <div style={{display:'grid',gridTemplateColumns:'120px 130px',gap:8,marginTop:10,alignItems:'end'}}>
                         <div>
                           <label htmlFor={`price-${s.id}`} style={{fontSize:11,color:'#8b92a9',display:'block'}}>Price (₱)</label>
                           <input id={`price-${s.id}`} type="number" min="0" step="0.01" value={form.price} onChange={e => setForm(p => ({...p, price: e.target.value}))} style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:6,borderRadius:6,fontSize:13}}/>
                         </div>
                         <div>
-                          <label htmlFor={`dur-${s.id}`} style={{fontSize:11,color:'#8b92a9',display:'block'}}>Duration (min)</label>
-                          <input id={`dur-${s.id}`} type="number" min="5" value={form.duration_minutes} onChange={e => setForm(p => ({...p, duration_minutes: parseInt(e.target.value) || 30}))} style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:6,borderRadius:6,fontSize:13}}/>
-                        </div>
-                        <div>
                           <label htmlFor={`cat-${s.id}`} style={{fontSize:11,color:'#8b92a9',display:'block'}}>Category</label>
                           <select id={`cat-${s.id}`} value={form.category} onChange={e => setForm(p => ({...p, category: e.target.value}))} style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:6,borderRadius:6,fontSize:13}}>
-                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            {SERVICE_CATEGORIES.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
                           </select>
                         </div>
                       </div>
                     ) : (
                       <div className={styles.meta}>
                         <span className={styles.price}>{s.price ? `₱${parseFloat(s.price).toFixed(0)}` : '—'}</span>
-                        <span className={styles.dur}>{s.duration_minutes} min</span>
-                        <span className="badge badge-gold">{s.category}</span>
+                        <span className={styles.dur}>30 min</span>
+                        <span className="badge badge-gold">{SERVICE_CATEGORIES.find(category => category.value === normalizeServiceCategory(s.category))?.label || 'Other service'}</span>
                       </div>
                     )}
                   </div>

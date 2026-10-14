@@ -3,6 +3,7 @@ import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
 import { Calendar, Clock, ToggleLeft, ToggleRight, Star, CheckCircle, UserX, X, MessageSquare, PlayCircle, Users, RefreshCw } from 'lucide-react';
+import { formatDate, formatTime } from '../../utils/time';
 
 const STATUS_LABEL = { pending:'Pending', confirmed:'Confirmed', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled', no_show:'No Show' };
 const STATUS_COLOR = { pending:'warning', confirmed:'success', in_progress:'info', completed:'success', cancelled:'error', no_show:'error' };
@@ -27,8 +28,7 @@ export default function BarberDashboard() {
 
   const fetchAppointments = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await api.get('/appointments/shop', { params: { date: today } });
+      const res = await api.get('/appointments/shop', { params: { upcoming: true } });
       // Backend returns { appointments, walk_ins }
       setAppointments(res.data.appointments || []);
     } catch {}
@@ -117,8 +117,9 @@ export default function BarberDashboard() {
 
   // Only show MY appointments (barber sees their own)
   const myAppts = appointments.filter(a => !profile?.id || String(a.barber_id) === String(profile?.id));
-  const todayActive = myAppts.filter(a => ['pending','confirmed','in_progress'].includes(a.status));
-  const completedToday = myAppts.filter(a => a.status === 'completed');
+  const today = new Date().toISOString().split('T')[0];
+  const upcomingActive = myAppts.filter(a => ['pending','confirmed','in_progress'].includes(a.status));
+  const completedToday = myAppts.filter(a => a.status === 'completed' && String(a.appointment_date).slice(0, 10) === today);
 
   // Queue stats — all barbers in shop
   const totalQueueWaiting =
@@ -133,24 +134,57 @@ export default function BarberDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 700, color: '#f0f0f0' }}>
-            #{a.queue_number}
-            {a.position && a.queue_number !== a.position && (
+            {a.is_event_booking ? 'FULL DAY' : `#${a.queue_number}`}
+            {!a.is_event_booking && a.position && a.queue_number !== a.position && (
               <span style={{ fontSize: 11, color: '#f59e0b', marginLeft: 6, fontWeight: 500 }}>pos. {a.position}</span>
             )}
             {' · '}{a.customer_name}
           </div>
           <div style={{ fontSize: 13, color: '#8b92a9', marginTop: 4 }}>
             <Clock size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-            {a.appointment_time?.substring(0, 5)} · {a.service_name}
+            {formatDate(a.appointment_date, { month: 'short', day: 'numeric', year: 'numeric' })}
+            {a.is_event_booking ? ' · Full-day event booking' : ` · ${formatTime(a.appointment_time)} · ${a.service_name}`}
           </div>
           {a.customer_no_show_count > 0 && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>⚠ {a.customer_no_show_count} prior no-shows</div>}
+          {a.is_event_booking && <div style={{ fontSize: 12, color: '#d4af37', marginTop: 4 }}>Event rate: ₱{Number(a.total_amount || 0).toFixed(2)}</div>}
         </div>
         <span className={`badge badge-${STATUS_COLOR[a.status]}`}>{STATUS_LABEL[a.status]}</span>
       </div>
+      {a.is_home_service && (
+        <div style={{ marginTop: 10, padding: 10, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 8, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 }}>
+          <strong style={{ color: '#a5b4fc' }}>{a.is_event_booking ? 'Full-day home event' : 'Home service'}</strong>
+          {a.home_contact_name && <div>Contact: {a.home_contact_name}{a.home_contact_phone ? ` · ${a.home_contact_phone}` : ''}</div>}
+          {a.home_address && <div>Address: {a.home_address}</div>}
+          {a.home_service_notes && <div>Instructions: {a.home_service_notes}</div>}
+        </div>
+      )}
+      {!['cancelled', 'no_show'].includes(a.status) && (
+        <div style={{ display: 'flex', alignItems: 'center', marginTop: 14 }}>
+          {[
+            ['pending', 'Requested'],
+            ['confirmed', 'Accepted'],
+            ['in_progress', 'In service'],
+            ['completed', 'Complete']
+          ].map(([status, label], index, stages) => {
+            const currentIndex = stages.findIndex(([stage]) => stage === a.status);
+            const isComplete = index < currentIndex;
+            const isCurrent = index === currentIndex;
+            return (
+              <div key={status} style={{ display: 'flex', alignItems: 'center', flex: index < stages.length - 1 ? 1 : 'initial' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: isComplete ? '#10b981' : isCurrent ? '#d4af37' : '#374151', boxShadow: isCurrent ? '0 0 0 3px rgba(212,175,55,0.15)' : 'none' }} />
+                  <span style={{ fontSize: 10, color: isComplete ? '#10b981' : isCurrent ? '#d4af37' : '#6b7280', whiteSpace: 'nowrap' }}>{label}</span>
+                </div>
+                {index < stages.length - 1 && <span style={{ height: 2, flex: 1, margin: '0 7px 15px', background: isComplete ? '#10b981' : '#374151' }} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-        {a.status === 'pending' && <button onClick={() => updateApptStatus(a, 'confirmed')} style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Confirm</button>}
-        {a.status === 'confirmed' && <button onClick={() => updateApptStatus(a, 'in_progress')} style={{ padding: '6px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Start</button>}
-        {a.status === 'in_progress' && <button onClick={() => updateApptStatus(a, 'completed')} style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}><CheckCircle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Complete</button>}
+        {a.status === 'pending' && <button onClick={() => updateApptStatus(a, 'confirmed')} style={{ padding: '8px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Accept appointment</button>}
+        {a.status === 'confirmed' && <button onClick={() => updateApptStatus(a, 'in_progress')} style={{ padding: '8px 14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Start service</button>}
+        {a.status === 'in_progress' && <button onClick={() => updateApptStatus(a, 'completed')} style={{ padding: '8px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}><CheckCircle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Mark completed</button>}
         {['pending','confirmed'].includes(a.status) && <button onClick={() => updateApptStatus(a, 'no_show')} style={{ padding: '6px 12px', background: '#7c2d12', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}><UserX size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />No-Show</button>}
         {a.status === 'completed' && <button onClick={() => { setRateModal(a); setRateForm({ rating: 5, comment: '' }); }} style={{ padding: '6px 12px', background: 'rgba(212,175,55,0.15)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.4)', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}><Star size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />Rate Customer</button>}
       </div>
@@ -180,7 +214,7 @@ export default function BarberDashboard() {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 24 }}>
           {[
-            { icon: <Calendar size={22} color="#d4af37" />, value: todayActive.length, label: 'Active today' },
+            { icon: <Calendar size={22} color="#d4af37" />, value: upcomingActive.length, label: 'Upcoming bookings' },
             { icon: <CheckCircle size={22} color="#16a34a" />, value: completedToday.length, label: 'Completed today' },
             { icon: <Users size={22} color="#3b82f6" />, value: totalQueueWaiting, label: 'Shop queue' },
             { icon: <Star size={22} color="#d4af37" />, value: parseFloat(profile?.rating || 5).toFixed(1), label: 'Your rating' },
@@ -195,13 +229,13 @@ export default function BarberDashboard() {
 
         {/* Auto-refresh indicator */}
         <div style={{ color: '#4b5563', fontSize: 11, marginBottom: 12, textAlign: 'right' }}>
-          ↻ Auto-refreshes every 20s · Last: {lastRefresh.toLocaleTimeString()}
+          ↻ Auto-refreshes every 20s · Last: {formatTime(lastRefresh.toTimeString().substring(0, 5))}
         </div>
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #2d3748', marginBottom: 20 }}>
           {[
-            { k: 'appointments', label: "Today's Appointments", icon: Calendar },
+            { k: 'appointments', label: 'Your Bookings', icon: Calendar },
             { k: 'queue', label: `Live Queue (${totalQueueWaiting})`, icon: Users },
           ].map(({ k, label, icon: Icon }) => (
             <button key={k} onClick={() => setTab(k)} style={{ padding: '12px 20px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === k ? '#d4af37' : 'transparent'}`, color: tab === k ? '#d4af37' : '#8b92a9', cursor: 'pointer', fontWeight: 600 }}>
@@ -213,11 +247,11 @@ export default function BarberDashboard() {
         {/* Appointments Tab */}
         {tab === 'appointments' && (
           <div>
-            {todayActive.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#8b92a9' }}>No active appointments today</div>
+            {upcomingActive.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#8b92a9' }}>No upcoming bookings assigned to you</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {todayActive.map(a => renderApptCard(a))}
+                {upcomingActive.map(a => renderApptCard(a))}
               </div>
             )}
             {completedToday.length > 0 && (
@@ -259,7 +293,7 @@ export default function BarberDashboard() {
                             {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: '#d4af37' }}>· Your client</span>}
                           </div>
                           <div style={{ color: '#8b92a9', fontSize: 12 }}>
-                            {a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''} · {a.appointment_time?.substring(0, 5)}
+                            {a.service_name} {a.barber_name ? `· ${a.barber_name}` : ''} · {formatTime(a.appointment_time)}
                           </div>
                         </div>
                         <span className={`badge ${a.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>
@@ -297,7 +331,9 @@ export default function BarberDashboard() {
                             {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: '#d4af37' }}>· Your client</span>}
                             <span style={{ marginLeft: 6, fontSize: 10, color: '#6b7280', fontWeight: 400 }}>(walk-in)</span>
                           </div>
-                          <div style={{ color: '#8b92a9', fontSize: 12 }}>{w.service_name || 'No service'} {w.barber_name ? `· ${w.barber_name}` : ''}</div>
+                          <div style={{ color: '#8b92a9', fontSize: 12 }}>
+                            {w.service_name || 'No service'} {w.barber_name ? `· ${w.barber_name}` : ''} · {formatTime(w.appointment_time)} · 30 min
+                          </div>
                         </div>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <span className={`badge ${w.status === 'in_progress' ? 'badge-info' : 'badge-warning'}`}>

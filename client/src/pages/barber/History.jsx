@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import { Calendar, Clock, User, Scissors, Star, Home, ChevronDown, ChevronUp, Ban } from 'lucide-react';
+import { formatTime } from '../../utils/time';
 
 const STATUS_META = {
   completed: { label: 'Completed', color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
@@ -12,6 +13,7 @@ const STATUS_META = {
 const TYPE_META = {
   online: { label: 'Online Booking', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
   home_service: { label: 'Home Service', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
+  home_event: { label: 'Home Event', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
   walk_in: { label: 'Walk-in', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
 };
 
@@ -106,11 +108,11 @@ export default function BarberHistory() {
                             <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: sm.bg, color: sm.color }}>{sm.label}</span>
                           </div>
                         </div>
-                        <div style={{ color: '#d4af37', fontSize: 13, fontWeight: 500, marginTop: 2 }}>{h.service_name}</div>
+                        <div style={{ color: '#d4af37', fontSize: 13, fontWeight: 500, marginTop: 2 }}>{h.is_event_booking ? 'Full-day event booking' : h.service_name}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
                           <span style={{ color: '#8b92a9', fontSize: 12, display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={11} />{new Date(h.appointment_date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          {h.appointment_time && <span style={{ color: '#8b92a9', fontSize: 12, display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={11} />{h.appointment_time?.substring(0, 5)}</span>}
-                          {h.service_price && <span style={{ color: '#d4af37', fontSize: 13, fontWeight: 700 }}>₱{parseFloat(h.service_price).toFixed(0)}</span>}
+                          {!h.is_event_booking && h.appointment_time && <span style={{ color: '#8b92a9', fontSize: 12, display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={11} />{formatTime(h.appointment_time)}</span>}
+                          {(h.is_event_booking ? h.total_amount : h.service_price) && <span style={{ color: '#d4af37', fontSize: 13, fontWeight: 700 }}>₱{parseFloat(h.is_event_booking ? h.total_amount : h.service_price).toFixed(2)}</span>}
                           {h.barber_rating && <span style={{ color: '#f59e0b', fontSize: 12 }}>{'★'.repeat(h.barber_rating)}{'☆'.repeat(5 - h.barber_rating)}</span>}
                         </div>
                       </div>
@@ -123,11 +125,11 @@ export default function BarberHistory() {
                           {[
                             ['Customer', h.customer_name],
                             ['Customer Rating', h.customer_rating ? `${parseFloat(h.customer_rating).toFixed(1)} ★` : '—'],
-                            ['Service', h.service_name],
+                            ['Service', h.is_event_booking ? 'Full-day event booking' : h.service_name],
                             ['Category', h.service_category || '—'],
-                            ['Price', h.service_price ? `₱${parseFloat(h.service_price).toFixed(0)}` : '—'],
+                            ['Price', h.is_event_booking ? `₱${parseFloat(h.total_amount || 0).toFixed(2)}` : h.service_price ? `₱${parseFloat(h.service_price).toFixed(0)}` : '—'],
                             ['Payment', h.payment_status || '—'],
-                            ['Duration', h.duration_minutes ? `${h.duration_minutes} min` : '—'],
+                            ['Duration', h.is_event_booking ? 'Full day' : '30 min'],
                             ['Type', tm.label],
                           ].map(([k, v]) => (
                             <div key={k}>

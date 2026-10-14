@@ -7,7 +7,6 @@ import Map from '../../components/Map';
 import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight, Gift, CheckCircle, X, Calendar } from 'lucide-react';
 import styles from './BarbershopView.module.css';
 import { formatTime } from '../../utils/time';
-import { Scissors, MapPin, Star, Clock, ChevronRight, Gift, X, CheckCircle, Calendar } from 'lucide-react' ;
 
 export default function CustomerBarbershop() {
   const { id } = useParams();
@@ -72,7 +71,7 @@ export default function CustomerBarbershop() {
                 <div className={styles.shopMeta}>
                   {shop.city && <span><MapPin size={13} /> {shop.city}</span>}
                   <span><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(shop.avg_rating).toFixed(1)} ({shop.review_count} reviews)</span>
-                  {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time?.substring(0,5))} – {formatTime(shop.closing_time?.substring(0,5))}</span>}
+                  {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time)} – {formatTime(shop.closing_time)}</span>}
                 </div>
               </div>
               <Link to={`/customer/book/${id}`} className={styles.bookBtn}>Book Now <ChevronRight size={16} /></Link>
@@ -115,7 +114,7 @@ export default function CustomerBarbershop() {
                           {s.description && <div className={styles.svcDesc}>{s.description}</div>}
                           <div className={styles.svcMeta}>
                             <span className={styles.svcPrice}>₱{parseFloat(s.price).toFixed(0)}</span>
-                            <span className={styles.svcDuration}>{s.duration_minutes} min</span>
+                            <span className={styles.svcDuration}>30 min</span>
                             {s.is_home_service && <span className="badge badge-info">Home Service</span>}
                           </div>
                         </div>
@@ -184,6 +183,7 @@ export default function CustomerBarbershop() {
                         <div style={{padding:14}}>
                           <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
                           {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
+                          {p.service_name && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>Reward service: {p.service_name}</div>}
                           {p.barber_name && (
                             <div style={{marginTop:8,display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#8b92a9'}}>
                               <Scissors size={11} color="#d4af37" />
@@ -235,7 +235,6 @@ export default function CustomerBarbershop() {
             <div className={styles.locationTab}>
               {shop.latitude && shop.longitude ? (
                 <Map
-                  center={[shop.latitude, shop.longitude]}
                   zoom={16}
                   markers={[{ id: shop.id, name: shop.name, address: shop.address, city: shop.city, latitude: shop.latitude, longitude: shop.longitude }]}
                   height="400px"

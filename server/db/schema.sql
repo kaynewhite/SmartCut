@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS barbers (
   phone TEXT,
   bio TEXT,
   photo_url TEXT,
+  event_price NUMERIC(10,2) NOT NULL DEFAULT 0,
   is_available BOOLEAN DEFAULT true,
   rating NUMERIC(3,2) DEFAULT 5.0,
   total_cuts INTEGER DEFAULT 0,
@@ -143,7 +144,12 @@ CREATE TABLE IF NOT EXISTS appointments (
   appointment_date DATE NOT NULL,
   appointment_time TEXT NOT NULL,
   is_home_service BOOLEAN DEFAULT false,
+  home_service_type TEXT DEFAULT 'personal',
+  is_event_booking BOOLEAN DEFAULT false,
   home_address TEXT,
+  home_contact_name TEXT,
+  home_contact_phone TEXT,
+  home_service_notes TEXT,
   notes TEXT,
   total_amount NUMERIC(10,2),
   queue_number INTEGER,
@@ -160,6 +166,9 @@ CREATE TABLE IF NOT EXISTS walk_ins (
   service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
   barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL,
   queue_number INTEGER,
+  appointment_date DATE,
+  appointment_time TIME,
+  duration_minutes INTEGER NOT NULL DEFAULT 30,
   status TEXT DEFAULT 'waiting',
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -234,6 +243,9 @@ CREATE TABLE IF NOT EXISTS loyalty_promos (
   name TEXT NOT NULL,
   description TEXT,
   points_cost INTEGER NOT NULL,
+  barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL,
+  service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
+  real_price NUMERIC(10,2) NOT NULL DEFAULT 0,
   image_url TEXT,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW()
@@ -245,6 +257,7 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (
   promo_id INTEGER REFERENCES loyalty_promos(id) ON DELETE CASCADE,
   barbershop_id INTEGER REFERENCES barbershops(id) ON DELETE CASCADE,
   points_spent INTEGER NOT NULL,
+  promo_value NUMERIC(10,2) NOT NULL DEFAULT 0,
   redemption_code TEXT,
   status TEXT DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT NOW()
