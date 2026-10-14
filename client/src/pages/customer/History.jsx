@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
+import { formatTime } from '../../utils/time';
 import { Calendar, Scissors, Star, MapPin, User, Clock, Gift, ChevronDown, ChevronUp, MessageSquare, Home, Ban } from 'lucide-react';
 
 function RatingModal({ appt, onClose, onSubmit }) {
@@ -124,7 +125,7 @@ export default function CustomerHistory() {
             <Scissors size={44} color="#374151" style={{ marginBottom: 16 }} />
             <div style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 500 }}>No history yet</div>
             <p style={{ color: '#8b92a9', marginTop: 8 }}>Book your first appointment to get started.</p>
-            <Link to="/customer/explore" style={{ display: 'inline-block', marginTop: 12, padding: '10px 20px', background: '#d4af37', color: '#0f1422', borderRadius: 8, fontWeight: 700, textDecoration: 'none' }}>Find a Barbershop</Link>
+            <Link to="/customer/dashboard" style={{ display: 'inline-block', marginTop: 12, padding: '10px 20px', background: '#d4af37', color: '#0f1422', borderRadius: 8, fontWeight: 700, textDecoration: 'none' }}>Find a Barbershop</Link>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -133,7 +134,7 @@ export default function CustomerHistory() {
               const hasReview = !!h.barbershop_rating;
               const sm = STATUS_META[h.status] || STATUS_META.completed;
               const isHomeService = h.is_home_service || h.service_is_home;
-              const appointmentType = isHomeService ? 'Home Service' : 'In-Shop';
+              const appointmentType = h.is_event_booking ? 'Home Event (Full Day)' : isHomeService ? 'Home Service' : 'In-Shop';
 
               return (
                 <div key={h.id} style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, overflow: 'hidden', transition: 'all .2s' }}>
@@ -147,7 +148,7 @@ export default function CustomerHistory() {
                         <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: sm.bg, color: sm.color, flexShrink: 0, whiteSpace: 'nowrap' }}>{sm.label}</span>
                       </div>
                       <div style={{ color: '#d4af37', fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-                        {h.service_name}
+                        {h.is_event_booking ? 'Full-day event booking' : h.service_name}
                         {isHomeService && <span style={{ marginLeft: 6, fontSize: 11, color: '#8b5cf6', background: 'rgba(139,92,246,0.12)', padding: '1px 6px', borderRadius: 4 }}><Home size={9} style={{ verticalAlign: 'middle', marginRight: 2 }} />Home</span>}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
@@ -165,8 +166,7 @@ export default function CustomerHistory() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
                         {[
                           ['Date', new Date(h.appointment_date).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })],
-                          ['Time', h.appointment_time?.substring(0, 5)],
-                          ['Duration', h.duration_minutes ? `${h.duration_minutes} min` : '—'],
+                          ...(!h.is_event_booking ? [['Time', formatTime(h.appointment_time)], ['Duration', '30 min']] : [['Duration', 'Full day']]),
                           ['Type', appointmentType],
                           ['Category', h.service_category || '—'],
                           ['Location', h.barbershop_city || '—'],

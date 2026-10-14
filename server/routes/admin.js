@@ -1,9 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const multer = require('multer');
+const path = require('path');
 const { authenticateAdmin } = require('../middleware/auth');
-const { createUpload, imageFileFilter, uploadedFileUrl } = require('../middleware/upload');
-const upload = createUpload({ fileFilter: imageFileFilter });
+
+const imageFileFilter = (req, file, cb) => {
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+  }
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
+  filename: (req, file, cb) => cb(null, `admin_${Date.now()}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 // ADMIN: dashboard stats
 router.get('/dashboard', authenticateAdmin, async (req, res) => {
@@ -18,7 +32,7 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'active'"),
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'barbershop' AND status = 'active'"),
       pool.query("SELECT COUNT(*) as count FROM subscriptions WHERE subscriber_type = 'customer' AND status = 'active'"),
-      pool.query("SELECT COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as total FROM appointments"),
+      pool.query("SELECT COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as total FROM appointments WHERE appointment_date <= CURRENT_DATE"),
       pool.query(`SELECT TO_CHAR(DATE_TRUNC('month', appointment_date), 'Mon YYYY') as month,
         DATE_TRUNC('month', appointment_date) as month_start,
         COALESCE(SUM(CASE WHEN payment_status='paid' THEN total_amount ELSE 0 END),0)::float as revenue,
@@ -69,6 +83,105 @@ router.get('/barbershops', authenticateAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
+// ADMIN: view full non-sensitive barbershop details and related records
+router.get('/barbershops/:id/details', authenticateAdmin, async (req, res) => {
+  try {
+    const shopId = Number(req.params.id);
+    if (!Number.isInteger(shopId) || shopId < 1) return res.status(400).json({ message: 'Invalid barbershop id' });
+
+    const [shopRes, subscriptionsRes, barbersRes, servicesRes, appointmentsRes, walkInsRes, paymentMethodsRes, promosRes, ratingsRes] = await Promise.all([
+      pool.query(
+        `SELECT id, name, email, phone, address, city, description, opening_time, closing_time,
+          qr_code_url, logo_url, cover_url, latitude, longitude, downpayment_percent, is_active,
+          subscription_status, rating, is_solo, solo_barber_id, restriction_reason,
+          restriction_requirements, appeal_text, appeal_status, restricted_at, created_at
+         FROM barbershops WHERE id=$1`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT id, status, payment_proof_url, admin_note, reviewed_by, expires_at, created_at, updated_at
+         FROM subscriptions WHERE subscriber_type='barbershop' AND subscriber_id=$1 ORDER BY created_at DESC`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT b.id, b.name, b.email, b.phone, b.bio, b.photo_url, b.event_price, b.is_available, b.rating,
+          b.total_cuts, b.created_at,
+          ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id=b.id) as specialties
+         FROM barbers b WHERE b.barbershop_id=$1 ORDER BY b.name`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT id, name, description, price, duration_minutes, category, image_url, is_active,
+          is_home_service, created_by_barber_id, created_at
+         FROM services WHERE barbershop_id=$1 ORDER BY name`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT a.id, a.customer_id, c.name as customer_name, c.email as customer_email, c.phone as customer_phone,
+          a.barber_id, br.name as barber_name, a.service_id, s.name as service_name,
+          a.appointment_date, a.appointment_time, a.is_home_service, a.home_service_type, a.is_event_booking, a.home_address,
+          a.home_contact_name, a.home_contact_phone, a.home_service_notes, a.notes,
+          a.total_amount, a.queue_number, a.status, a.payment_status, a.payment_proof_url, a.created_at
+         FROM appointments a
+         LEFT JOIN customers c ON c.id=a.customer_id
+         LEFT JOIN barbers br ON br.id=a.barber_id
+         LEFT JOIN services s ON s.id=a.service_id
+         WHERE a.barbershop_id=$1 ORDER BY a.appointment_date DESC, a.appointment_time DESC`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT w.id, w.customer_name, w.barber_id, b.name as barber_name, w.service_id, s.name as service_name,
+          w.appointment_date, w.appointment_time, w.duration_minutes, w.queue_number, w.status, w.created_at
+         FROM walk_ins w
+         LEFT JOIN barbers b ON b.id=w.barber_id
+         LEFT JOIN services s ON s.id=w.service_id
+         WHERE w.barbershop_id=$1 ORDER BY w.appointment_date DESC, w.appointment_time DESC`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT id, type, account_name, account_number, qr_code_url, is_active, created_at
+         FROM payment_methods WHERE barbershop_id=$1 ORDER BY created_at DESC`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT p.id, p.name, p.description, p.points_cost, p.real_price, p.image_url, p.is_active, p.created_at,
+          b.name as barber_name, s.name as service_name,
+          COUNT(r.id)::int as redemption_count,
+          COALESCE(SUM(r.points_spent), 0)::int as points_spent,
+          COALESCE(SUM(r.promo_value), 0)::float as promo_value_redeemed
+         FROM loyalty_promos p
+         LEFT JOIN barbers b ON b.id=p.barber_id
+         LEFT JOIN services s ON s.id=p.service_id
+         LEFT JOIN promo_redemptions r ON r.promo_id=p.id
+         WHERE p.barbershop_id=$1
+         GROUP BY p.id, b.name, s.name ORDER BY p.created_at DESC`,
+        [shopId]
+      ),
+      pool.query(
+        `SELECT r.id, r.customer_id, c.name as customer_name, r.barber_id, b.name as barber_name,
+          r.appointment_id, r.barbershop_rating, r.barber_rating, r.comment, r.created_at
+         FROM ratings r
+         LEFT JOIN customers c ON c.id=r.customer_id
+         LEFT JOIN barbers b ON b.id=r.barber_id
+         WHERE r.barbershop_id=$1 ORDER BY r.created_at DESC`,
+        [shopId]
+      )
+    ]);
+    if (!shopRes.rows.length) return res.status(404).json({ message: 'Barbershop not found' });
+    res.json({
+      profile: shopRes.rows[0],
+      subscriptions: subscriptionsRes.rows,
+      barbers: barbersRes.rows,
+      services: servicesRes.rows,
+      appointments: appointmentsRes.rows,
+      walk_ins: walkInsRes.rows,
+      payment_methods: paymentMethodsRes.rows,
+      promos: promosRes.rows,
+      ratings: ratingsRes.rows
+    });
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
 // ADMIN: list all customers
 router.get('/customers', authenticateAdmin, async (req, res) => {
   try {
@@ -81,6 +194,80 @@ router.get('/customers', authenticateAdmin, async (req, res) => {
       ORDER BY c.created_at DESC
     `);
     res.json(result.rows);
+  } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
+});
+
+// ADMIN: view full non-sensitive customer details and related records
+router.get('/customers/:id/details', authenticateAdmin, async (req, res) => {
+  try {
+    const customerId = Number(req.params.id);
+    if (!Number.isInteger(customerId) || customerId < 1) return res.status(400).json({ message: 'Invalid customer id' });
+
+    const [customerRes, subscriptionsRes, appointmentsRes, loyaltyRes, loyaltyBalancesRes, promoRedemptionsRes, bansRes] = await Promise.all([
+      pool.query(
+        `SELECT id, name, email, phone, avatar_url, loyalty_points, rating, no_show_count,
+          subscription_status, created_at FROM customers WHERE id=$1`,
+        [customerId]
+      ),
+      pool.query(
+        `SELECT id, status, payment_proof_url, admin_note, reviewed_by, expires_at, created_at, updated_at
+         FROM subscriptions WHERE subscriber_type='customer' AND subscriber_id=$1 ORDER BY created_at DESC`,
+        [customerId]
+      ),
+      pool.query(
+        `SELECT a.id, a.barbershop_id, bs.name as barbershop_name,
+          a.barber_id, br.name as barber_name, a.service_id, s.name as service_name,
+          a.appointment_date, a.appointment_time, a.is_home_service, a.home_service_type, a.is_event_booking, a.home_address,
+          a.home_contact_name, a.home_contact_phone, a.home_service_notes, a.notes,
+          a.total_amount, a.queue_number, a.status, a.payment_status, a.payment_proof_url, a.created_at
+         FROM appointments a
+         LEFT JOIN barbershops bs ON bs.id=a.barbershop_id
+         LEFT JOIN barbers br ON br.id=a.barber_id
+         LEFT JOIN services s ON s.id=a.service_id
+         WHERE a.customer_id=$1 ORDER BY a.appointment_date DESC, a.appointment_time DESC`,
+        [customerId]
+      ),
+      pool.query(
+        `SELECT lt.id, lt.barbershop_id, bs.name as barbershop_name, lt.points, lt.type, lt.description, lt.created_at
+         FROM loyalty_transactions lt
+         LEFT JOIN barbershops bs ON bs.id=lt.barbershop_id
+         WHERE lt.customer_id=$1 ORDER BY lt.created_at DESC`,
+        [customerId]
+      ),
+      pool.query(
+        `SELECT csl.barbershop_id, bs.name as barbershop_name, csl.points, csl.updated_at
+         FROM customer_shop_loyalty csl
+         LEFT JOIN barbershops bs ON bs.id=csl.barbershop_id
+         WHERE csl.customer_id=$1 ORDER BY bs.name`,
+        [customerId]
+      ),
+      pool.query(
+        `SELECT r.id, r.barbershop_id, bs.name as barbershop_name, r.promo_id, p.name as promo_name,
+          r.points_spent, r.promo_value, r.redemption_code, r.status, r.appointment_id, r.created_at
+         FROM promo_redemptions r
+         LEFT JOIN barbershops bs ON bs.id=r.barbershop_id
+         LEFT JOIN loyalty_promos p ON p.id=r.promo_id
+         WHERE r.customer_id=$1 ORDER BY r.created_at DESC`,
+        [customerId]
+      ),
+      pool.query(
+        `SELECT cb.id, cb.barbershop_id, bs.name as barbershop_name, cb.reason, cb.banned_until, cb.created_at
+         FROM customer_bans cb
+         LEFT JOIN barbershops bs ON bs.id=cb.barbershop_id
+         WHERE cb.customer_id=$1 ORDER BY cb.created_at DESC`,
+        [customerId]
+      )
+    ]);
+    if (!customerRes.rows.length) return res.status(404).json({ message: 'Customer not found' });
+    res.json({
+      profile: customerRes.rows[0],
+      subscriptions: subscriptionsRes.rows,
+      appointments: appointmentsRes.rows,
+      loyalty_transactions: loyaltyRes.rows,
+      loyalty_balances: loyaltyBalancesRes.rows,
+      promo_redemptions: promoRedemptionsRes.rows,
+      bans: bansRes.rows
+    });
   } catch (err) { console.error(err); res.status(500).json({ message: 'Server error' }); }
 });
 
@@ -180,7 +367,7 @@ router.post('/qr', authenticateAdmin, upload.single('qr'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file' });
     const { type, account_name } = req.body;
-    const qr_url = uploadedFileUrl(req.file);
+    const qr_url = `/uploads/${req.file.filename}`;
     await pool.query('UPDATE admin_qr_codes SET is_active = false WHERE admin_id = $1', [req.user.id]);
     const result = await pool.query(
       `INSERT INTO admin_qr_codes (admin_id, type, account_name, qr_url) VALUES ($1,$2,$3,$4) RETURNING *`,

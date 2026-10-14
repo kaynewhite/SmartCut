@@ -1,9 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const multer = require('multer');
+const path = require('path');
 const { authenticateBarbershop } = require('../middleware/auth');
-const { createUpload, imageFileFilter, uploadedFileUrl } = require('../middleware/upload');
-const upload = createUpload({ fileFilter: imageFileFilter });
+
+const imageFileFilter = (req, file, cb) => {
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+  }
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
+  filename: (req, file, cb) => cb(null, `pm_${Date.now()}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 // AUTHENTICATED: all /me routes MUST come before /:barbershopId to avoid conflict
 router.get('/me', authenticateBarbershop, async (req, res) => {
@@ -23,7 +37,7 @@ router.post('/me', authenticateBarbershop, upload.single('qr_code'), async (req,
   try {
     const { type, account_name, account_number } = req.body;
     if (!type) return res.status(400).json({ message: 'Payment type required' });
-    const qr_code_url = req.file ? uploadedFileUrl(req.file) : null;
+    const qr_code_url = req.file ? `/uploads/${req.file.filename}` : null;
     const result = await pool.query(
       `INSERT INTO payment_methods (barbershop_id, type, account_name, account_number, qr_code_url, is_active)
        VALUES ($1,$2,$3,$4,$5,true) RETURNING *`,
@@ -45,7 +59,7 @@ router.put('/me/:id', authenticateBarbershop, upload.single('qr_code'), async (r
     );
     if (!existingRes.rows.length) return res.status(404).json({ message: 'Not found' });
     const existing = existingRes.rows[0];
-    const qr_code_url = req.file ? uploadedFileUrl(req.file) : existing.qr_code_url;
+    const qr_code_url = req.file ? `/uploads/${req.file.filename}` : existing.qr_code_url;
     const result = await pool.query(
       `UPDATE payment_methods SET type=$1, account_name=$2, account_number=$3, qr_code_url=$4, is_active=$5
        WHERE id=$6 AND barbershop_id=$7 RETURNING *`,

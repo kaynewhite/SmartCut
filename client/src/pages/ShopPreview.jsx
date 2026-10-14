@@ -134,7 +134,7 @@ export default function ShopPreview() {
                       {s.description && <div className={styles.serviceDesc}>{s.description}</div>}
                       <div className={styles.serviceFooter}>
                         <span className={styles.servicePrice}>₱{parseFloat(s.price).toFixed(0)}</span>
-                        {s.duration_minutes && <span className={styles.serviceDur}>{s.duration_minutes} min</span>}
+                        <span className={styles.serviceDur}>30 min</span>
                         {s.barber_name && <span className={styles.serviceBarber}>by {s.barber_name}</span>}
                       </div>
                     </div>

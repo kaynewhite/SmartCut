@@ -3,17 +3,18 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
-import toast from 'react-hot-toast';
 import { Calendar, Clock, Star, Search, ArrowRight, Scissors, MapPin, Gift, TrendingUp, Bell, ChevronRight } from 'lucide-react';
+import { formatDate, formatTime } from '../../utils/time';
 import styles from './Dashboard.module.css';
 
 export default function CustomerDashboard() {
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [topServices, setTopServices] = useState([]);
   const [promos, setPromos] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const fetchAll = async () => {
     try {
       const [apptRes, topRes, promoRes, remRes] = await Promise.all([
@@ -41,11 +42,11 @@ export default function CustomerDashboard() {
       <div className={styles.page}>
         <div className={styles.welcome}>
           <div>
-            <h1>Welcome, {user?.name?.split(' ')[0]}!</h1>
+            <h1>Welcome, {user?.name?.split(' ')[0]}! ✂️</h1>
             <p>Find and book your next haircut</p>
           </div>
           <Link to="/customer/explore" className={styles.exploreBtn}>
-            <Search size={16} /> Explore Barbershops
+            <Search size={16} /> Find Barbershops
           </Link>
         </div>
 
@@ -73,7 +74,7 @@ export default function CustomerDashboard() {
               <div style={{color:'#f59e0b',fontWeight:600,marginBottom:6}}>Upcoming reminder{reminders.length > 1 ? 's' : ''} (next 24h)</div>
               {reminders.map(r => (
                 <div key={r.id} style={{fontSize:13,color:'#cbd5e1'}}>
-                  <strong>{r.service_name}</strong> at <strong>{r.barbershop_name}</strong> on {r.appointment_date} at {r.appointment_time?.substring(0,5)}
+                  <strong>{r.service_name}</strong> at <strong>{r.barbershop_name}</strong> on {formatDate(r.appointment_date)} at {formatTime(r.appointment_time)}
                 </div>
               ))}
             </div>
@@ -103,7 +104,7 @@ export default function CustomerDashboard() {
                       <div className={styles.apptShop}>{a.barbershop_name}</div>
                       <div className={styles.apptService}>{a.service_name} {a.barber_name ? `• ${a.barber_name}` : ''}</div>
                       <div className={styles.apptTime}>
-                        <Clock size={12} /> {a.appointment_date} at {a.appointment_time?.substring(0,5)}
+                        <Clock size={12} /> {formatDate(a.appointment_date)} at {formatTime(a.appointment_time)}
                         {a.queue_number && <span> • Queue #{a.queue_number}</span>}
                       </div>
                     </div>
@@ -168,6 +169,7 @@ export default function CustomerDashboard() {
           </section>
         )}
       </div>
+
     </Layout>
   );
 }

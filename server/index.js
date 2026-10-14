@@ -6,13 +6,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const pool = require('./db');
 
-const http = require('http');
-const { initSocket } = require('./socket');
-
 const app = express();
-const isVercel = process.env.VERCEL === '1';
-const server = isVercel ? null : http.createServer(app);
-const io = isVercel ? null : initSocket(server);
 const PORT = process.env.PORT || 3001;
 
 const uploadDir = path.join(__dirname, 'uploads');
@@ -58,7 +52,6 @@ app.use('/api/loyalty-promos', require('./routes/loyaltyPromos'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/barber-ratings', require('./routes/barberRatings'));
-app.use('/api/recommendations', require('./routes/recommendations'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
@@ -83,6 +76,19 @@ async function runMigrations() {
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS is_solo BOOLEAN DEFAULT false`,
     `ALTER TABLE barbershops ADD COLUMN IF NOT EXISTS solo_barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL`,
     `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS loyalty_awarded BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_contact_name TEXT`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_contact_phone TEXT`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_service_notes TEXT`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS home_service_type TEXT DEFAULT 'personal'`,
+    `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS is_event_booking BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE barbers ADD COLUMN IF NOT EXISTS event_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
+    `ALTER TABLE walk_ins ADD COLUMN IF NOT EXISTS appointment_date DATE`,
+    `ALTER TABLE walk_ins ADD COLUMN IF NOT EXISTS appointment_time TIME`,
+    `ALTER TABLE walk_ins ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30`,
+    `UPDATE walk_ins SET appointment_date = COALESCE(appointment_date, created_at::date),
+       appointment_time = COALESCE(appointment_time, created_at::time)
+     WHERE appointment_date IS NULL OR appointment_time IS NULL`,
+    `UPDATE services SET duration_minutes = 30 WHERE duration_minutes IS DISTINCT FROM 30`,
     `CREATE TABLE IF NOT EXISTS promo_redemptions (
       id SERIAL PRIMARY KEY,
       customer_id INTEGER NOT NULL,
@@ -97,11 +103,9 @@ async function runMigrations() {
     `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'`,
     `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS appointment_id INTEGER`,
     `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS barber_id INTEGER REFERENCES barbers(id) ON DELETE SET NULL`,
-    `ALTER TABLE customers ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,7)`,
-    `ALTER TABLE customers ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7)`,
-    `ALTER TABLE customers ADD COLUMN IF NOT EXISTS location_city TEXT`,
-    `ALTER TABLE customers ADD COLUMN IF NOT EXISTS location_address TEXT`,
-    `ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT`,
+    `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS real_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
+    `ALTER TABLE loyalty_promos ADD COLUMN IF NOT EXISTS service_id INTEGER REFERENCES services(id) ON DELETE SET NULL`,
+    `ALTER TABLE promo_redemptions ADD COLUMN IF NOT EXISTS promo_value NUMERIC(10,2) NOT NULL DEFAULT 0`,
   ];
   for (const sql of migrations) {
     try { await pool.query(sql); } catch (err) { console.error('Migration error:', err.message); }
@@ -138,36 +142,15 @@ async function seedAdmin() {
   } catch (err) { console.error('Admin seed error:', err.message); }
 }
 
-async function startServer(maxRetries = 5, delayMs = 3000) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Connecting to PostgreSQL (attempt ${attempt}/${maxRetries})...`);
-      await pool.query('SELECT NOW()');
-      console.log('PostgreSQL connected successfully.');
-
-      await runMigrations();
-      await seedAdmin();
-      await expireSubscriptions();
-      setInterval(expireSubscriptions, 60 * 60 * 1000); // check every hour
-
-      server.listen(PORT, '0.0.0.0', () => {
-        console.log(`SmartCut API & WebSocket running on port ${PORT}`);
-      });
-      return;
-    } catch (err) {
-      console.error(`PostgreSQL connection attempt ${attempt} failed:`, err.message);
-      if (attempt === maxRetries) {
-        console.error('Max retries reached. Exiting.');
-        process.exit(1);
-      }
-      console.log(`Retrying in ${delayMs / 1000}s...`);
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-}
-
-if (!isVercel) {
-  startServer();
-}
-
-module.exports = app;
+pool.query('SELECT NOW()').then(async () => {
+  await runMigrations();
+  await seedAdmin();
+  await expireSubscriptions();
+  setInterval(expireSubscriptions, 60 * 60 * 1000); // check every hour
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`SmartCut API running on port ${PORT}`);
+  });
+}).catch((err) => {
+  console.error('Failed to connect to PostgreSQL', err);
+  process.exit(1);
+});

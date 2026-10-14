@@ -17,8 +17,8 @@ const isNeon = !!process.env.NEON_DATABASE_URL;
 const pool = new Pool({
   connectionString,
   ssl: isNeon ? { rejectUnauthorized: false } : undefined,
-  max: 15,
-  connectionTimeoutMillis: 30000,
+  max: 10,
+  connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,
   allowExitOnIdle: false,
 });

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from './Layout';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Upload, QrCode, Plus, Check } from 'lucide-react';
+import { Upload, QrCode, Plus } from 'lucide-react';
 
 const QR_TYPES = ['GCash', 'Maya', 'BDO', 'BPI', 'Bank Transfer', 'Other'];
 
@@ -81,7 +81,7 @@ export default function AdminSettings() {
                 {file ? file.name : (qrs.length > 0 ? 'Upload new QR to replace current' : 'Click to upload QR code image')}
                 <input type="file" accept="image/*" onChange={e => setFile(e.target.files[0])} style={{ display: 'none' }} />
               </label>
-              {file && <div style={{ marginTop: 8, fontSize: 12, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}><Check size={13} /> Ready to upload: {file.name}</div>}
+              {file && <div style={{ marginTop: 8, fontSize: 12, color: '#10b981' }}>✓ Ready to upload: {file.name}</div>}
             </div>
             <button type="submit" disabled={saving || !file} style={{ padding: '12px 24px', background: saving || !file ? '#374151' : '#d4af37', color: saving || !file ? '#8b92a9' : '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: saving || !file ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
               <Plus size={14} /> {saving ? 'Uploading...' : qrs.length > 0 ? 'Replace QR Code' : 'Upload QR Code'}

@@ -2,17 +2,15 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { Plus, Save, Trash2, Edit2, X, Scissors, Upload, ToggleLeft, ToggleRight, Star, Check } from 'lucide-react';
-
-const CATEGORIES = ['haircut', 'beard', 'shave', 'color', 'treatment', 'kids', 'other'];
+import { Plus, Save, Trash2, Edit2, X, Scissors, Upload, ToggleLeft, ToggleRight, Star } from 'lucide-react';
+import { SERVICE_CATEGORIES, normalizeServiceCategory } from '../../constants/serviceCategories';
 
 function ServiceModal({ service, onClose, onSave }) {
   const [form, setForm] = useState({
     name: service?.name || '',
     description: service?.description || '',
     price: service?.price || '',
-    duration_minutes: service?.duration_minutes || 30,
-    category: service?.category || 'haircut',
+    category: normalizeServiceCategory(service?.category) || 'haircut',
     is_home_service: service?.is_home_service || false,
     is_active: service?.is_active !== false,
   });
@@ -53,13 +51,9 @@ function ServiceModal({ service, onClose, onSave }) {
               <input type="number" min="0" step="0.01" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} placeholder="0.00" required style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Duration (min)</label>
-              <input type="number" min="5" step="5" value={form.duration_minutes} onChange={e => setForm(p => ({ ...p, duration_minutes: parseInt(e.target.value) }))} style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
-            </div>
-            <div>
               <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Category</label>
               <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 14 }}>
-                {CATEGORIES.map(c => <option key={c} value={c} style={{ background: '#0a1020', textTransform: 'capitalize' }}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                {SERVICE_CATEGORIES.map(({ value, label }) => <option key={value} value={value} style={{ background: '#0a1020' }}>{label}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -70,7 +64,7 @@ function ServiceModal({ service, onClose, onSave }) {
               <label style={{ display: 'block', color: '#8b92a9', fontSize: 13, marginBottom: 6 }}>Service Image</label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#0a1020', border: '1px dashed #1e2a3a', borderRadius: 8, cursor: 'pointer', color: imageFile ? '#10b981' : '#8b92a9', fontSize: 13 }}>
                 <Upload size={15} />
-                {imageFile ? <><Check size={14} color="#10b981" /> {imageFile.name}</> : (isEdit && service?.image_url ? 'Upload new image (replaces current)' : 'Upload service image')}
+                {imageFile ? `✓ ${imageFile.name}` : (isEdit && service?.image_url ? 'Upload new image (replaces current)' : 'Upload service image')}
                 <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} style={{ display: 'none' }} />
               </label>
               {isEdit && service?.image_url && !imageFile && (
@@ -207,9 +201,9 @@ export default function BarberServicesPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <div>
                       <span style={{ color: '#d4af37', fontWeight: 700, fontSize: 18 }}>₱{parseFloat(s.price).toFixed(0)}</span>
-                      <span style={{ color: '#8b92a9', fontSize: 12, marginLeft: 8 }}>{s.duration_minutes} min</span>
+                      <span style={{ color: '#8b92a9', fontSize: 12, marginLeft: 8 }}>30 min</span>
                     </div>
-                    <span style={{ padding: '2px 8px', background: '#1e2a3a', color: '#8b92a9', borderRadius: 4, fontSize: 11, textTransform: 'capitalize' }}>{s.category}</span>
+                    <span style={{ padding: '2px 8px', background: '#1e2a3a', color: '#8b92a9', borderRadius: 4, fontSize: 11 }}>{SERVICE_CATEGORIES.find(category => category.value === normalizeServiceCategory(s.category))?.label || 'Other service'}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => setModal(s)} style={{ flex: 1, padding: '8px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37', borderRadius: 6, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>

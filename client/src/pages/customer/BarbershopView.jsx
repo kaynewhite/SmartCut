@@ -4,10 +4,9 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import Layout from '../../components/Layout';
 import Map from '../../components/Map';
-import { useShopQueueSocket } from '../../context/SocketContext';
+import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight, Gift, CheckCircle, X, Calendar } from 'lucide-react';
 import styles from './BarbershopView.module.css';
-import { formatTime, formatQueueNumber } from '../../utils/time';
-import { Scissors, MapPin, Star, Clock, ChevronRight, Gift, X, CheckCircle, Calendar } from 'lucide-react' ;
+import { formatTime } from '../../utils/time';
 
 export default function CustomerBarbershop() {
   const { id } = useParams();
@@ -19,29 +18,16 @@ export default function CustomerBarbershop() {
   const [promos, setPromos] = useState([]);
   const [redeeming, setRedeeming] = useState(null);
   const [bookPrompt, setBookPrompt] = useState(null); // { promo, redemption_code, barber_id }
-  const [liveQueue, setLiveQueue] = useState({ unified_queue: [], chairs: [], stats: { total_waiting: 0, in_progress_count: 0 } });
 
   const refreshLoyalty = () => {
     api.get(`/loyalty-promos/balance/${id}`).then(r => setPoints(r.data.points || 0)).catch(() => {});
     api.get('/loyalty-promos', { params: { barbershop_id: id } }).then(r => setPromos(r.data || [])).catch(() => {});
   };
 
-  const fetchQueue = () => {
-    api.get(`/queue/${id}`).then(r => setLiveQueue(r.data)).catch(() => {});
-  };
-
   useEffect(() => {
     api.get(`/barbershops/${id}`).then(res => { setData(res.data); setLoading(false); }).catch(() => setLoading(false));
     refreshLoyalty();
-    fetchQueue();
   }, [id]);
-
-  // Real-time Queue socket sync
-  useShopQueueSocket(id, {
-    onQueueUpdate: (data) => {
-      setLiveQueue(data);
-    }
-  });
 
   const redeem = async (promo) => {
     if (points < promo.points_cost) return toast.error(`You have ${points} pts, need ${promo.points_cost}`);
@@ -85,7 +71,7 @@ export default function CustomerBarbershop() {
                 <div className={styles.shopMeta}>
                   {shop.city && <span><MapPin size={13} /> {shop.city}</span>}
                   <span><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(shop.avg_rating).toFixed(1)} ({shop.review_count} reviews)</span>
-                  {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time?.substring(0,5))} – {formatTime(shop.closing_time?.substring(0,5))}</span>}
+                  {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time)} – {formatTime(shop.closing_time)}</span>}
                 </div>
               </div>
               <Link to={`/customer/book/${id}`} className={styles.bookBtn}>Book Now <ChevronRight size={16} /></Link>
@@ -105,50 +91,12 @@ export default function CustomerBarbershop() {
           </div>
 
           <div className={styles.tabs}>
-            {['services', 'barbers', 'queue', 'promos', 'reviews', 'location'].map(t => (
+            {['services','barbers','promos','reviews','location'].map(t => (
               <button key={t} className={`${styles.tab} ${tab === t ? styles.active : ''}`} onClick={() => setTab(t)}>
-                {t === 'queue' ? 'Live Queue' : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
-
-          {tab === 'queue' && (
-            <div>
-              <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: 14, padding: 20, marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-                  <div>
-                    <h3 style={{ color: '#f0f0f0', margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>Today's Live Queue</h3>
-                    <p style={{ color: '#8b92a9', fontSize: 13, margin: 0 }}>
-                      {liveQueue.stats?.total_waiting || 0} waiting · {liveQueue.stats?.in_progress_count || 0} in progress · ~{liveQueue.stats?.est_wait_minutes || 0} min est. wait
-                    </p>
-                  </div>
-                  <Link
-                    to={`/customer/queue/${id}`}
-                    style={{ padding: '8px 16px', background: '#d4af37', color: '#0f1422', fontWeight: 700, borderRadius: 8, textDecoration: 'none', fontSize: 13 }}
-                  >
-                    Open Live Queue Screen →
-                  </Link>
-                </div>
-
-                {/* Barber Chairs */}
-                {liveQueue.chairs?.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginTop: 14 }}>
-                    {liveQueue.chairs.map(c => (
-                      <div key={c.barber_id} style={{ background: '#1a2234', border: '1px solid #2d3748', borderRadius: 10, padding: 12 }}>
-                        <div style={{ fontWeight: 700, color: '#f0f0f0', fontSize: 13 }}>{c.barber_name}</div>
-                        <div style={{ fontSize: 11, color: c.status === 'serving' ? '#3b82f6' : c.status === 'available' ? '#10b981' : '#ef4444', marginTop: 2, fontWeight: 600 }}>
-                          {c.status === 'serving' ? 'In Service' : c.status === 'available' ? 'Ready for Next' : 'Offline'}
-                        </div>
-                        {c.current_serving && (
-                          <div style={{ fontSize: 11, color: '#8b92a9', marginTop: 4 }}>Serving: {c.current_serving.service_name}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {tab === 'services' && (
             <div>
@@ -166,7 +114,7 @@ export default function CustomerBarbershop() {
                           {s.description && <div className={styles.svcDesc}>{s.description}</div>}
                           <div className={styles.svcMeta}>
                             <span className={styles.svcPrice}>₱{parseFloat(s.price).toFixed(0)}</span>
-                            <span className={styles.svcDuration}>{s.duration_minutes} min</span>
+                            <span className={styles.svcDuration}>30 min</span>
                             {s.is_home_service && <span className="badge badge-info">Home Service</span>}
                           </div>
                         </div>
@@ -235,6 +183,7 @@ export default function CustomerBarbershop() {
                         <div style={{padding:14}}>
                           <div style={{fontWeight:600,color:'#f0f0f0'}}>{p.name}</div>
                           {p.description && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>{p.description}</div>}
+                          {p.service_name && <div style={{fontSize:12,color:'#cbd5e1',marginTop:6}}>Reward service: {p.service_name}</div>}
                           {p.barber_name && (
                             <div style={{marginTop:8,display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#8b92a9'}}>
                               <Scissors size={11} color="#d4af37" />
@@ -286,7 +235,6 @@ export default function CustomerBarbershop() {
             <div className={styles.locationTab}>
               {shop.latitude && shop.longitude ? (
                 <Map
-                  center={[shop.latitude, shop.longitude]}
                   zoom={16}
                   markers={[{ id: shop.id, name: shop.name, address: shop.address, city: shop.city, latitude: shop.latitude, longitude: shop.longitude }]}
                   height="400px"

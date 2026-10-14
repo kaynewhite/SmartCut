@@ -2,23 +2,36 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const path = require('path');
 const { authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
 const { resolveActingBarberId } = require('../utils/soloBarber');
-const { broadcastQueueUpdate, emitToShop } = require('../socket');
-const { createUpload, imageFileFilter, uploadedFileUrl } = require('../middleware/upload');
-const upload = createUpload({ fileFilter: imageFileFilter });
+
+const imageFileFilter = (req, file, cb) => {
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+  }
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
+  filename: (req, file, cb) => cb(null, `barber_${Date.now()}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 // PUBLIC: get barbers for a barbershop with their services
 router.get('/', async (req, res) => {
   try {
     const { barbershop_id } = req.query;
     let query = `
-      SELECT b.id, b.barbershop_id, b.name, b.phone, b.photo_url, b.bio, b.is_available, b.rating, b.total_cuts,
+      SELECT b.id, b.barbershop_id, b.name, b.phone, b.photo_url, b.bio, b.event_price, b.is_available, b.rating, b.total_cuts,
         COALESCE(AVG(r.barber_rating), 0)::numeric(3,2) as avg_rating,
         COUNT(DISTINCT r.id) as review_count,
         ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties,
         ARRAY(
-          SELECT json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'duration_minutes', s.duration_minutes, 'image_url', s.image_url)
+          SELECT json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'duration_minutes', 30, 'image_url', s.image_url)
           FROM services s JOIN barber_services bs2 ON bs2.service_id = s.id
           WHERE bs2.barber_id = b.id AND s.is_active = true AND s.price IS NOT NULL
         ) as services
@@ -43,7 +56,7 @@ router.get('/specialties', async (req, res) => {
 router.get('/me', authenticateBarbershop, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT b.id, b.barbershop_id, b.name, b.phone, b.email, b.photo_url, b.bio, b.is_available, b.rating, b.total_cuts,
+      SELECT b.id, b.barbershop_id, b.name, b.phone, b.email, b.photo_url, b.bio, b.event_price, b.is_available, b.rating, b.total_cuts,
         (b.password IS NOT NULL) as has_account,
         COALESCE(AVG(r.barber_rating), 0)::numeric(3,2) as avg_rating,
         ARRAY(SELECT specialty FROM barber_specialties WHERE barber_id = b.id) as specialties
@@ -81,7 +94,7 @@ router.put('/me/profile', authenticateBarbershopOrBarber, upload.single('photo')
     const { bio, phone, specialties, service_ids } = req.body;
     const existing = await pool.query('SELECT * FROM barbers WHERE id = $1', [barberId]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
-    const photo_url = req.file ? uploadedFileUrl(req.file) : existing.rows[0].photo_url;
+    const photo_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].photo_url;
     await pool.query(
       `UPDATE barbers SET bio=$1, phone=$2, photo_url=$3 WHERE id=$4`,
       [bio ?? existing.rows[0].bio, phone ?? existing.rows[0].phone, photo_url, barberId]
@@ -140,17 +153,8 @@ router.patch('/me/toggle', authenticateBarbershopOrBarber, async (req, res) => {
   try {
     const barberId = await resolveActingBarberId(req);
     const result = await pool.query('UPDATE barbers SET is_available = NOT is_available WHERE id = $1 RETURNING *', [barberId]);
-    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
-    const barber = result.rows[0];
-    delete barber.password;
-
-    // Real-time broadcasts
-    if (barber.barbershop_id) {
-      broadcastQueueUpdate(barber.barbershop_id);
-      emitToShop(barber.barbershop_id, 'BARBER_STATUS_CHANGED', barber);
-    }
-
-    res.json(barber);
+    delete result.rows[0].password;
+    res.json(result.rows[0]);
   } catch (err) {
     if (err && err.status) return res.status(err.status).json({ message: err.message });
     res.status(500).json({ message: 'Server error' });
@@ -160,13 +164,15 @@ router.patch('/me/toggle', authenticateBarbershopOrBarber, async (req, res) => {
 // OWNER: create barber
 router.post('/', authenticateBarbershop, upload.single('photo'), async (req, res) => {
   try {
-    const { name, phone, bio, email, password, specialties } = req.body;
+    const { name, phone, bio, email, password, specialties, event_price } = req.body;
     if (!name) return res.status(400).json({ message: 'Name required' });
+    const eventPrice = Number(event_price ?? 0);
+    if (!Number.isFinite(eventPrice) || eventPrice < 0) return res.status(400).json({ message: 'Event price must be zero or greater' });
     const shopRes = await pool.query('SELECT is_solo FROM barbershops WHERE id = $1', [req.user.id]);
     if (shopRes.rows[0]?.is_solo) {
       return res.status(400).json({ message: 'Solo Operator Mode is enabled. Disable it in Settings to add more barbers.' });
     }
-    const photo_url = req.file ? uploadedFileUrl(req.file) : null;
+    const photo_url = req.file ? `/uploads/${req.file.filename}` : null;
     let hashedPwd = null, normalizedEmail = null;
     if (email) {
       normalizedEmail = email.toLowerCase().trim();
@@ -176,8 +182,8 @@ router.post('/', authenticateBarbershop, upload.single('photo'), async (req, res
       hashedPwd = await bcrypt.hash(password, 10);
     }
     const result = await pool.query(
-      'INSERT INTO barbers (barbershop_id, name, phone, bio, photo_url, email, password) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, barbershop_id, name, phone, bio, photo_url, email, is_available',
-      [req.user.id, name, phone || null, bio || null, photo_url, normalizedEmail, hashedPwd]
+      'INSERT INTO barbers (barbershop_id, name, phone, bio, photo_url, email, password, event_price) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, barbershop_id, name, phone, bio, photo_url, email, event_price, is_available',
+      [req.user.id, name, phone || null, bio || null, photo_url, normalizedEmail, hashedPwd, eventPrice]
     );
     const barber = result.rows[0];
     if (specialties) {
@@ -193,10 +199,12 @@ router.post('/', authenticateBarbershop, upload.single('photo'), async (req, res
 // OWNER: update barber
 router.put('/:id', authenticateBarbershop, upload.single('photo'), async (req, res) => {
   try {
-    const { name, phone, bio, is_available, specialties, email, password } = req.body;
+    const { name, phone, bio, is_available, specialties, email, password, event_price } = req.body;
     const existing = await pool.query('SELECT * FROM barbers WHERE id = $1 AND barbershop_id = $2', [req.params.id, req.user.id]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
-    const photo_url = req.file ? uploadedFileUrl(req.file) : existing.rows[0].photo_url;
+    const eventPrice = event_price === undefined ? Number(existing.rows[0].event_price) : Number(event_price);
+    if (!Number.isFinite(eventPrice) || eventPrice < 0) return res.status(400).json({ message: 'Event price must be zero or greater' });
+    const photo_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].photo_url;
     let updateEmail = existing.rows[0].email, updatePassword = existing.rows[0].password;
     if (email !== undefined) {
       const normalized = email ? email.toLowerCase().trim() : null;
@@ -217,6 +225,11 @@ router.put('/:id', authenticateBarbershop, upload.single('photo'), async (req, r
        is_available !== undefined ? (is_available === 'true' || is_available === true) : existing.rows[0].is_available,
        updateEmail, updatePassword, req.params.id, req.user.id]
     );
+    const eventPriceResult = await pool.query(
+      'UPDATE barbers SET event_price=$1 WHERE id=$2 AND barbershop_id=$3 RETURNING event_price',
+      [eventPrice, req.params.id, req.user.id]
+    );
+    result.rows[0].event_price = eventPriceResult.rows[0].event_price;
     if (specialties !== undefined) {
       await pool.query('DELETE FROM barber_specialties WHERE barber_id = $1', [req.params.id]);
       const list = typeof specialties === 'string' ? specialties.split(',').map(s => s.trim()).filter(Boolean) : (specialties || []);

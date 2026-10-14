@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
-import Map, { SINILOAN_CENTER, DEFAULT_ZOOM } from '../../components/Map';
+import Map, { DEFAULT_ZOOM } from '../../components/Map';
 import toast from 'react-hot-toast';
 import {
   Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight,
   MapPin, CreditCard, CheckCircle, Clock, MessageSquare, Gift,
-  ShieldAlert, Send, Lock, User, ChevronRight, Scissors,
-  AlertTriangle, XCircle, Check
+  ShieldAlert, Send, Lock, User, ChevronRight, Scissors
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import styles from './Settings.module.css';
@@ -227,6 +226,11 @@ export default function BarbershopSettings() {
 
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }));
   const setLoy = f => e => setLoyaltyForm(p => ({ ...p, [f]: parseInt(e.target.value) || 0 }));
+  const subscriptionState = subStatus
+    ? subStatus.is_active ? 'active'
+      : subStatus.subscription?.status === 'pending' ? 'pending'
+        : 'inactive'
+    : shop?.subscription_status === 'active' || user?.subscription_status === 'active' ? 'active' : null;
 
   const inp = { className: styles.input };
   const ta = { className: styles.textarea };
@@ -272,9 +276,7 @@ export default function BarbershopSettings() {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <ShieldAlert size={22} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
               <div style={{ flex: 1 }}>
-                <div style={{ color: '#ef4444', fontWeight: 700, fontSize: 15, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertTriangle size={16} /> Your Shop is Restricted
-                </div>
+                <div style={{ color: '#ef4444', fontWeight: 700, fontSize: 15, marginBottom: 4 }}>⚠️ Your Shop is Restricted</div>
                 <p style={{ color: '#8b92a9', fontSize: 13, margin: '0 0 8px' }}>Your barbershop is hidden from customers and cannot receive new bookings.</p>
                 {shop.restriction_reason && <div style={{ background: '#0a1020', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}><div style={{ color: '#ef4444', fontSize: 12, fontWeight: 600, marginBottom: 3 }}>Reason:</div><div style={{ color: '#f0f0f0', fontSize: 13 }}>{shop.restriction_reason}</div></div>}
                 {shop.restriction_requirements && <div style={{ background: '#0a1020', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}><div style={{ color: '#f59e0b', fontSize: 12, fontWeight: 600, marginBottom: 3 }}>Requirements:</div><div style={{ color: '#f0f0f0', fontSize: 13 }}>{shop.restriction_requirements}</div></div>}
@@ -284,11 +286,7 @@ export default function BarbershopSettings() {
                   </div>
                 ) : (
                   <form onSubmit={handleAppeal}>
-                    {shop.appeal_status === 'rejected' && (
-                      <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <XCircle size={15} /> Previous appeal rejected. You may submit a new one.
-                      </div>
-                    )}
+                    {shop.appeal_status === 'rejected' && <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 13, marginBottom: 10 }}>❌ Previous appeal rejected. You may submit a new one.</div>}
                     <div style={{ color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Submit an appeal if you believe this restriction is a mistake:</div>
                     <textarea value={appealText} onChange={e => setAppealText(e.target.value)} rows={3} placeholder="Explain your situation..." style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box', marginBottom: 8 }} />
                     <button type="submit" disabled={submittingAppeal} style={{ padding: '10px 20px', background: '#d4af37', color: '#0f1422', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -340,6 +338,12 @@ export default function BarbershopSettings() {
               <div className={styles.section}>
                 <h2><User size={17} /> Shop Profile</h2>
                 <p className={styles.sectionDesc}>Update your shop's name, contact info, hours, and description.</p>
+                {subscriptionState && (
+                  <div className={`${styles.badgeRow} ${subscriptionState === 'active' ? styles.badgeSuccess : subscriptionState === 'pending' ? styles.badgeWarn : ''}`} style={{ marginBottom: 16, ...(subscriptionState === 'inactive' ? { background: 'rgba(107,114,128,0.08)', border: '1px solid rgba(107,114,128,0.25)', color: '#9ca3af' } : {}) }}>
+                    {subscriptionState === 'active' ? <CheckCircle size={16} /> : subscriptionState === 'pending' ? <Clock size={16} /> : <CreditCard size={16} />}
+                    <span>{subscriptionState === 'active' ? 'Subscription Active' : subscriptionState === 'pending' ? 'Subscription Pending Approval' : 'Not Subscribed'}</span>
+                  </div>
+                )}
                 <form onSubmit={handleSave} className={styles.form}>
                   <div className={styles.field}><label>Shop Name *</label><input {...inp} value={form.name} onChange={set('name')} required /></div>
                   <div className={styles.row}>
@@ -394,13 +398,13 @@ export default function BarbershopSettings() {
               <div className={styles.section}>
                 <h2><MapPin size={17} /> Shop Location</h2>
                 <p className={styles.sectionDesc}>Click on the map to place your shop's pin, then save the location.</p>
-                <Map center={location || SINILOAN_CENTER} zoom={DEFAULT_ZOOM} onLocationSelect={setLocation} selectedLocation={location} height="360px" />
+                <Map zoom={DEFAULT_ZOOM} onLocationSelect={setLocation} selectedLocation={location} height="360px" />
                 {location && (
                   <div className={styles.locationInfo}>
                     Pin: {location[0].toFixed(6)}, {location[1].toFixed(6)}
                     {savedLocation && location[0] === savedLocation[0]
-                      ? <span style={{ color: '#16a34a', marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={13} /> Saved</span>
-                      : <span style={{ color: '#f59e0b', marginLeft: 10 }}>Unsaved</span>}
+                      ? <span style={{ color: '#16a34a', marginLeft: 10 }}>✓ Saved</span>
+                      : <span style={{ color: '#f59e0b', marginLeft: 10 }}>● Unsaved</span>}
                   </div>
                 )}
                 <div style={{ marginTop: 14 }}>
@@ -517,7 +521,7 @@ export default function BarbershopSettings() {
             {active === 'subscription' && (
               <div className={styles.section}>
                 <h2><CreditCard size={17} /> Subscription</h2>
-                <p className={styles.sectionDesc}>An active subscription makes your shop visible to customers on the explore page.</p>
+                <p className={styles.sectionDesc}>An active subscription makes your shop visible to customers on the For You page.</p>
 
                 {subStatus?.is_active ? (
                   <div className={`${styles.badgeRow} ${styles.badgeSuccess}`} style={{ marginBottom: 0 }}>
@@ -542,7 +546,7 @@ export default function BarbershopSettings() {
                     )}
                     <form onSubmit={handleSubRequest}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'var(--bg-secondary)', border: '1px dashed var(--border)', borderRadius: 9, cursor: 'pointer', color: proofFile ? '#10b981' : '#8b92a9', fontSize: 13, marginBottom: 10 }}>
-                        <Upload size={15} />{proofFile ? <><Check size={14} color="#10b981" /> {proofFile.name}</> : 'Upload payment receipt'}
+                        <Upload size={15} />{proofFile ? `✓ ${proofFile.name}` : 'Upload payment receipt'}
                         <input type="file" accept="image/*" onChange={e => setProofFile(e.target.files[0])} style={{ display: 'none' }} />
                       </label>
                       <button type="submit" disabled={uploading || !proofFile || subStatus?.subscription?.status === 'pending'} className={styles.saveBtn}>

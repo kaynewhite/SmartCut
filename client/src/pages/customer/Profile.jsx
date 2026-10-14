@@ -3,10 +3,9 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
-import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon, Lock, Camera, Scissors, Check, MapPin, Navigation } from 'lucide-react';
-import L from 'leaflet';
+import { User, Gift, AlertCircle, CreditCard, Upload, CheckCircle, Clock, FileText, MessageSquare, ShieldAlert, MapIcon, Lock, Camera, Scissors } from 'lucide-react';
 
-const TAB_LIST = ['profile', 'location', 'loyalty', 'subscription', 'reports'];
+const TAB_LIST = ['profile', 'loyalty', 'subscription', 'reports'];
 
 export default function CustomerProfile() {
   const { user, updateUser } = useAuth();
@@ -25,156 +24,14 @@ export default function CustomerProfile() {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || null);
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
   const [pwSaving, setPwSaving] = useState(false);
-  const [avatarInputRef] = [useRef()];
-  const [locForm, setLocForm] = useState({ latitude: '', longitude: '', location_city: '', location_address: '' });
-  const [locSaving, setLocSaving] = useState(false);
-  const [locLoading, setLocLoading] = useState(false);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
-  const leafletMapRef = useRef(null);
+  const avatarInputRef = useRef();
 
   useEffect(() => {
-    api.get('/customers/me').then(res => {
-      if (res.data) {
-        setLocForm({
-          latitude: res.data.latitude || '',
-          longitude: res.data.longitude || '',
-          location_city: res.data.location_city || '',
-          location_address: res.data.location_address || ''
-        });
-      }
-    }).catch(() => {});
     api.get('/customers/me/loyalty').then(res => setLoyalty(res.data)).catch(() => {});
     api.get('/subscriptions/status').then(res => setSubStatus(res.data)).catch(() => {});
     api.get('/admin/qr').then(res => setAdminQr(res.data)).catch(() => {});
     api.get('/reports/mine').then(res => setReports(res.data)).catch(() => {});
   }, []);
-
-  // Initialize map when location tab is active
-  useEffect(() => {
-    if (tab !== 'location' || !mapRef.current) return;
-    if (leafletMapRef.current) return;
-
-    const initialLat = parseFloat(locForm.latitude) || 14.5995;
-    const initialLng = parseFloat(locForm.longitude) || 120.9842;
-
-    const map = L.map(mapRef.current).setView([initialLat, initialLng], locForm.latitude ? 14 : 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-    }).addTo(map);
-    leafletMapRef.current = map;
-
-    if (locForm.latitude && locForm.longitude) {
-      markerRef.current = L.marker([parseFloat(locForm.latitude), parseFloat(locForm.longitude)]).addTo(map);
-    }
-
-    map.on('click', async (e) => {
-      const { lat, lng } = e.latlng;
-      if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
-      else markerRef.current = L.marker([lat, lng]).addTo(map);
-
-      setLocForm(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
-
-      try {
-        const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`).then(r => r.json());
-        const city = geoRes?.address?.city || geoRes?.address?.town || geoRes?.address?.municipality || '';
-        const address = geoRes?.display_name || '';
-        setLocForm(prev => ({
-          ...prev,
-          location_city: city || prev.location_city,
-          location_address: address || prev.location_address
-        }));
-      } catch {}
-    });
-
-    return () => {
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-        leafletMapRef.current = null;
-        markerRef.current = null;
-      }
-    };
-  }, [tab]);
-
-  const handleGPSLocation = () => {
-    if (!navigator.geolocation) return toast.error('Geolocation is not supported by your browser.');
-    setLocLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        try {
-          const lat = coords.latitude;
-          const lng = coords.longitude;
-
-          let city = '', address = '';
-          try {
-            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`).then(r => r.json());
-            city = geoRes?.address?.city || geoRes?.address?.town || geoRes?.address?.municipality || '';
-            address = geoRes?.display_name || '';
-          } catch {}
-
-          setLocForm({
-            latitude: lat.toFixed(6),
-            longitude: lng.toFixed(6),
-            location_city: city,
-            location_address: address
-          });
-
-          if (leafletMapRef.current) {
-            leafletMapRef.current.setView([lat, lng], 15);
-            if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
-            else markerRef.current = L.marker([lat, lng]).addTo(leafletMapRef.current);
-          }
-
-          toast.success(`Location detected${city ? `: ${city}` : ''}`);
-        } catch {
-          toast.error('Failed to parse location');
-        }
-        setLocLoading(false);
-      },
-      () => {
-        toast.error('Location permission denied.');
-        setLocLoading(false);
-      },
-      { timeout: 10000 }
-    );
-  };
-
-  const handleSaveLocation = async (e) => {
-    e.preventDefault();
-    setLocSaving(true);
-    try {
-      const payload = {
-        latitude: locForm.latitude ? parseFloat(locForm.latitude) : null,
-        longitude: locForm.longitude ? parseFloat(locForm.longitude) : null,
-        location_city: locForm.location_city || null,
-        location_address: locForm.location_address || null,
-      };
-      const res = await api.patch('/customers/location', payload);
-      updateUser({ ...user, ...res.data.customer });
-      toast.success('Location saved successfully!');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save location');
-    }
-    setLocSaving(false);
-  };
-
-  const handleClearLocation = async () => {
-    if (!confirm('Clear your saved location?')) return;
-    setLocSaving(true);
-    try {
-      await api.patch('/customers/location', { latitude: null, longitude: null, location_city: null, location_address: null });
-      setLocForm({ latitude: '', longitude: '', location_city: '', location_address: '' });
-      if (markerRef.current && leafletMapRef.current) {
-        leafletMapRef.current.removeLayer(markerRef.current);
-        markerRef.current = null;
-      }
-      updateUser({ ...user, latitude: null, longitude: null, location_city: null, location_address: null });
-      toast.success('Location cleared');
-    } catch {
-      toast.error('Failed to clear location');
-    }
-    setLocSaving(false);
-  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -245,6 +102,7 @@ export default function CustomerProfile() {
   };
 
   const subState = subStatus?.is_active ? 'active'
+    : user?.subscription_status === 'active' ? 'active'
     : subStatus?.subscription?.status === 'pending' ? 'pending'
     : user?.subscription_status === 'restricted' ? 'restricted'
     : 'inactive';
@@ -349,124 +207,6 @@ export default function CustomerProfile() {
           </div>
         )}
 
-        {tab === 'location' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ background: '#0f1827', border: '1px solid #1e2a3a', borderRadius: 12, padding: 22 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-                <div>
-                  <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <MapPin size={16} color="#d4af37" /> My Location
-                  </h2>
-                  <p style={{ color: '#8b92a9', fontSize: 13, margin: 0 }}>
-                    Used to calculate exact distance to barbershops and recommend the nearest options.
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={handleGPSLocation}
-                    disabled={locLoading}
-                    style={{
-                      padding: '8px 14px', background: '#d4af37', color: '#0f1422',
-                      border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
-                    }}
-                  >
-                    <Navigation size={13} /> {locLoading ? 'Locating…' : 'Use GPS'}
-                  </button>
-                  {locForm.latitude && (
-                    <button
-                      type="button"
-                      onClick={handleClearLocation}
-                      disabled={locSaving}
-                      style={{
-                        padding: '8px 12px', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
-                        border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, fontWeight: 600,
-                        cursor: 'pointer', fontSize: 12,
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Map view for pin-drop */}
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ color: '#8b92a9', fontSize: 12, marginBottom: 8 }}>
-                  Click anywhere on the map to pin your location:
-                </div>
-                <div
-                  ref={mapRef}
-                  style={{
-                    height: 280, width: '100%', borderRadius: 10,
-                    overflow: 'hidden', border: '1px solid #1e2a3a',
-                  }}
-                />
-              </div>
-
-              <form onSubmit={handleSaveLocation}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                  <div>
-                    <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Latitude</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 14.599512"
-                      value={locForm.latitude}
-                      onChange={e => setLocForm(p => ({ ...p, latitude: e.target.value }))}
-                      style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Longitude</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 120.984222"
-                      value={locForm.longitude}
-                      onChange={e => setLocForm(p => ({ ...p, longitude: e.target.value }))}
-                      style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>City / Municipality</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Siniloan, Laguna"
-                    value={locForm.location_city}
-                    onChange={e => setLocForm(p => ({ ...p, location_city: e.target.value }))}
-                    style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: 18 }}>
-                  <label style={{ display: 'block', color: '#8b92a9', fontSize: 12, marginBottom: 6 }}>Detailed Address</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 123 Rizal St, Barangay Poblacion"
-                    value={locForm.location_address}
-                    onChange={e => setLocForm(p => ({ ...p, location_address: e.target.value }))}
-                    style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={locSaving}
-                  style={{
-                    width: '100%', padding: '12px', background: '#d4af37', color: '#0f1422',
-                    border: 'none', borderRadius: 8, fontWeight: 700, cursor: locSaving ? 'not-allowed' : 'pointer',
-                    fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}
-                >
-                  <Check size={16} /> {locSaving ? 'Saving…' : 'Save Location'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
         {tab === 'loyalty' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Total points summary */}
@@ -526,16 +266,8 @@ export default function CustomerProfile() {
             </p>
 
             <div style={{ padding: '14px 18px', background: subBadge.bg, border: `1px solid ${subBadge.border}`, borderRadius: 10, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {subState === 'active' ? (
-                  <CheckCircle size={24} color="#10b981" />
-                ) : subState === 'pending' ? (
-                  <Clock size={24} color="#f59e0b" />
-                ) : subState === 'restricted' ? (
-                  <ShieldAlert size={24} color="#ef4444" />
-                ) : (
-                  <Lock size={24} color="#8b92a9" />
-                )}
+              <div style={{ fontSize: 24 }}>
+                {subState === 'active' ? '✅' : subState === 'pending' ? '⏳' : subState === 'restricted' ? '⛔' : '🔒'}
               </div>
               <div>
                 <div style={{ color: subBadge.color, fontWeight: 700, fontSize: 15 }}>
@@ -550,19 +282,20 @@ export default function CustomerProfile() {
               </div>
             </div>
 
+            {subState !== 'active' && adminQr?.qr_url && (
+              <div style={{ background: '#0a1020', borderRadius: 10, padding: 16, marginBottom: 14, textAlign: 'center' }}>
+                <div style={{ color: '#f0f0f0', fontWeight: 600, marginBottom: 4 }}>Pay via {adminQr.type}</div>
+                {adminQr.account_name && <div style={{ color: '#8b92a9', fontSize: 13, marginBottom: 10 }}>{adminQr.account_name}</div>}
+                <img src={adminQr.qr_url} alt="Payment QR" style={{ maxWidth: 180, width: '100%', margin: '0 auto', display: 'block', borderRadius: 8, border: '1px solid #1e2a3a', background: '#fff', padding: 4 }} />
+                <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 10 }}>Scan and pay, then upload your receipt below</div>
+              </div>
+            )}
+
             {(subState === 'inactive') && (
               <>
-                {adminQr && (
-                  <div style={{ background: '#0a1020', borderRadius: 10, padding: 16, marginBottom: 14, textAlign: 'center' }}>
-                    <div style={{ color: '#f0f0f0', fontWeight: 600, marginBottom: 4 }}>Pay via {adminQr.type}</div>
-                    {adminQr.account_name && <div style={{ color: '#8b92a9', fontSize: 13, marginBottom: 10 }}>{adminQr.account_name}</div>}
-                    <img src={adminQr.qr_url} alt="Payment QR" style={{ maxWidth: 180, width: '100%', margin: '0 auto', display: 'block', borderRadius: 8, border: '1px solid #1e2a3a', background: '#fff', padding: 4 }} />
-                    <div style={{ color: '#8b92a9', fontSize: 12, marginTop: 10 }}>Scan and pay, then upload your receipt below</div>
-                  </div>
-                )}
                 <form onSubmit={handleSubRequest}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#0a1020', border: '1px dashed #1e2a3a', borderRadius: 8, cursor: 'pointer', color: proofFile ? '#10b981' : '#8b92a9', fontSize: 13, marginBottom: 10 }}>
-                    <Upload size={15} /> {proofFile ? <><Check size={14} color="#10b981" /> {proofFile.name}</> : 'Upload payment receipt'}
+                    <Upload size={15} /> {proofFile ? `✓ ${proofFile.name}` : 'Upload payment receipt'}
                     <input type="file" accept="image/*" onChange={e => setProofFile(e.target.files[0])} style={{ display: 'none' }} />
                   </label>
                   <button type="submit" disabled={uploading || !proofFile} style={{ width: '100%', padding: '12px', background: proofFile ? '#d4af37' : '#374151', color: proofFile ? '#0f1422' : '#6b7280', border: 'none', borderRadius: 8, fontWeight: 700, cursor: proofFile ? 'pointer' : 'not-allowed', fontSize: 15 }}>

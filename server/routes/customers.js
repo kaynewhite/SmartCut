@@ -1,44 +1,34 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const multer = require('multer');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const { authenticateCustomer } = require('../middleware/auth');
-const { createUpload, imageFileFilter, uploadedFileUrl } = require('../middleware/upload');
-const upload = createUpload({ fileFilter: imageFileFilter });
+
+const imageFileFilter = (req, file, cb) => {
+  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+  }
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
+  filename: (req, file, cb) => cb(null, `avatar_${Date.now()}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
 
 router.get('/me', authenticateCustomer, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, email, phone, avatar_url, loyalty_points, rating, no_show_count,
-              subscription_status, latitude, longitude, location_city, location_address
-       FROM customers WHERE id = $1`,
+      'SELECT id, name, email, phone, avatar_url, loyalty_points, rating, no_show_count, subscription_status FROM customers WHERE id = $1',
       [req.user.id]
     );
     if (!result.rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
-});
-
-// CUSTOMER: update location (lat/lng + optional human-readable address)
-router.patch('/location', authenticateCustomer, async (req, res) => {
-  try {
-    const { latitude, longitude, location_city, location_address } = req.body;
-    if ((latitude !== undefined && (isNaN(latitude) || latitude < -90 || latitude > 90)) ||
-        (longitude !== undefined && (isNaN(longitude) || longitude < -180 || longitude > 180))) {
-      return res.status(400).json({ message: 'Invalid coordinates' });
-    }
-    const result = await pool.query(
-      `UPDATE customers
-       SET latitude = $1, longitude = $2, location_city = $3, location_address = $4
-       WHERE id = $5
-       RETURNING id, name, latitude, longitude, location_city, location_address`,
-      [latitude || null, longitude || null, location_city || null, location_address || null, req.user.id]
-    );
-    res.json({ message: 'Location saved', customer: result.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
 });
 
 router.put('/me', authenticateCustomer, async (req, res) => {
@@ -56,7 +46,7 @@ router.put('/me', authenticateCustomer, async (req, res) => {
 router.post('/me/avatar', authenticateCustomer, upload.single('avatar'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const url = uploadedFileUrl(req.file);
+    const url = `/uploads/${req.file.filename}`;
     const result = await pool.query(
       'UPDATE customers SET avatar_url=$1 WHERE id=$2 RETURNING id, name, email, phone, avatar_url, loyalty_points, rating',
       [url, req.user.id]

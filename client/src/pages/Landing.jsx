@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Scissors, Star, Calendar, Users, MapPin, ArrowRight, Shield, Zap, TrendingUp, ChevronRight, Check } from 'lucide-react';
+import { Scissors, Star, Calendar, Users, MapPin, ArrowRight, Shield, Zap, TrendingUp, ChevronRight } from 'lucide-react';
 import api from '../utils/api';
 import styles from './Landing.module.css';
 
@@ -266,7 +266,7 @@ export default function Landing() {
               'Manage your barbers, services, and schedules',
               'Build your reputation with customer reviews',
             ].map((item, i) => (
-              <li key={i}><Check size={14} className={styles.checkmark} style={{ flexShrink: 0 }} />{item}</li>
+              <li key={i}><span className={styles.checkmark}>✓</span>{item}</li>
             ))}
           </ul>
           <Link to="/barbershop/register" className={styles.btnPrimary}>

@@ -17,8 +17,6 @@ export default function BarbershopAppointments() {
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'online' | 'walkin'
-  const [rateModal, setRateModal] = useState(null);
-  const [rateForm, setRateForm] = useState({ rating: 5, comment: '' });
   const [banModal, setBanModal] = useState(null);
   const [banForm, setBanForm] = useState({ reason: '', duration_unit: 'days', duration_value: 7 });
 
@@ -43,7 +41,7 @@ export default function BarbershopAppointments() {
       await api.patch(`/appointments/${id}/status`, { status });
       toast.success(status === 'no_show' ? 'Marked as no-show.' : 'Status updated');
       fetchAppointments();
-    } catch { toast.error('Update failed'); }
+    } catch (err) { toast.error(err.response?.data?.message || 'Update failed'); }
   };
 
   const verifyPayment = async (id, approved) => {
@@ -51,22 +49,6 @@ export default function BarbershopAppointments() {
       await api.patch(`/appointments/${id}/verify-payment`, { approved });
       toast.success(approved ? 'Payment approved' : 'Payment rejected');
       fetchAppointments();
-    } catch { toast.error('Failed'); }
-  };
-
-  const submitRating = async (e) => {
-    e.preventDefault();
-    try {
-      await api.post('/customer-ratings', {
-        customer_id: rateModal.customer_id,
-        appointment_id: rateModal.id,
-        barber_id: rateModal.barber_id,
-        rating: rateForm.rating,
-        comment: rateForm.comment
-      });
-      toast.success('Customer rated');
-      setRateModal(null);
-      setRateForm({ rating: 5, comment: '' });
     } catch { toast.error('Failed'); }
   };
 
@@ -140,8 +122,8 @@ export default function BarbershopAppointments() {
                 {visibleAppts.map(a => (
                   <div key={a.id} className={styles.card}>
                     <div className={styles.cardTop}>
-                      <div className={styles.queueNum} title={`Queue ${formatQueueNumber(a.queue_number)}`}>
-                        {formatQueueNumber(a.queue_number)}
+                      <div className={styles.queueNum} title={a.is_event_booking ? 'Full-day event reservation' : `Queue ${formatQueueNumber(a.queue_number)}`}>
+                        {a.is_event_booking ? 'ALL DAY' : formatQueueNumber(a.queue_number)}
                       </div>
                       <div className={styles.customerInfo}>
                         <div className={styles.customerName}>
@@ -158,13 +140,22 @@ export default function BarbershopAppointments() {
                       <span className={`badge badge-${STATUS_COLOR[a.status]}`}>{STATUS_LABEL[a.status]}</span>
                     </div>
                     <div className={styles.details}>
-                      <span><Clock size={13} /> {formatTime(a.appointment_time?.substring(0,5))}</span>
-                      <span><Scissors size={13} /> {a.service_name}{a.barber_name ? ` · ${a.barber_name}` : ''}</span>
+                      {!a.is_event_booking && <span><Clock size={13} /> {formatTime(a.appointment_time)}</span>}
+                      <span><Scissors size={13} /> {a.is_event_booking ? `Full-day event booking${a.barber_name ? ` · ${a.barber_name}` : ''}` : `${a.service_name}${a.barber_name ? ` · ${a.barber_name}` : ''} · 30 min`}</span>
                       {a.is_home_service && <span className="badge badge-info">Home Service</span>}
+                      {a.is_event_booking && <span className="badge badge-warning">Barber reserved all day</span>}
+                      {a.is_event_booking && <span style={{ color: '#d4af37', fontWeight: 600 }}>₱{Number(a.total_amount || 0).toFixed(2)} event rate</span>}
                       {a.appointment_type === 'online' && !a.is_home_service && (
                         <span style={{ fontSize: 11, color: '#3b82f6', padding: '1px 7px', background: 'rgba(59,130,246,0.1)', borderRadius: 4 }}>In-Store</span>
                       )}
                     </div>
+                    {a.is_home_service && (
+                      <div className={styles.notes}>
+                        {a.home_contact_name && <div>Contact: {a.home_contact_name}{a.home_contact_phone ? ` · ${a.home_contact_phone}` : ''}</div>}
+                        {a.home_address && <div>Home address: {a.home_address}</div>}
+                        {a.home_service_notes && <div>Instructions: {a.home_service_notes}</div>}
+                      </div>
+                    )}
                     {a.notes && <div className={styles.notes}>Note: {a.notes}</div>}
                     <div className={styles.payInfo}>
                       <span className={`badge badge-${a.payment_status === 'paid' ? 'success' : a.payment_status === 'pending_verification' ? 'warning' : 'error'}`}>
@@ -180,16 +171,13 @@ export default function BarbershopAppointments() {
                     </div>
                     <div className={styles.actions} style={{flexWrap:'wrap',gap:8}}>
                       <select className={styles.statusSelect} value={a.status} onChange={e => updateStatus(a.id, e.target.value)}>
-                        {STATUS_OPTS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                        {STATUS_OPTS.filter(s => s !== 'confirmed' || !a.barber_id || a.status === 'confirmed').map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                       </select>
                       {['pending','confirmed','in_progress'].includes(a.status) && (
                         <button onClick={() => updateStatus(a.id, 'no_show')} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'#7c2d12',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
                           <UserX size={13}/> No-Show
                         </button>
                       )}
-                      <button onClick={() => setRateModal(a)} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
-                        <Star size={13}/> Rate Customer
-                      </button>
                       <button onClick={() => setBanModal(a)} style={{display:'flex',alignItems:'center',gap:4,padding:'6px 12px',background:'#991b1b',color:'#fff',border:'none',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600}}>
                         <Ban size={13}/> Ban
                       </button>
@@ -211,16 +199,18 @@ export default function BarbershopAppointments() {
                   {visibleWalkIns.map(w => (
                     <div key={`wi-${w.id}`} className={styles.card} style={{borderColor:'rgba(245,158,11,0.25)'}}>
                       <div className={styles.cardTop}>
-                        <div className={styles.queueNum} style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)' }}>
+                        <div className={styles.queueNum}>
                           {formatQueueNumber(w.queue_number)}
                         </div>
                         <div className={styles.customerInfo}>
                           <div className={styles.customerName}>{w.customer_name || 'Walk-in Customer'}</div>
                           {w.barber_name && <div className={styles.customerPhone}><Scissors size={11} style={{verticalAlign:'middle',marginRight:3}}/>{w.barber_name}</div>}
                         </div>
-                        <span className="badge badge-warning">Walk-in</span>
+                        <span className={`badge badge-${STATUS_COLOR[w.status] || 'warning'}`}>{STATUS_LABEL[w.status] || w.status}</span>
+                        <span style={{ fontSize: 11, color: '#f59e0b' }}>Walk-in</span>
                       </div>
                       <div className={styles.details}>
+                        <span><Clock size={13} /> {formatTime(w.appointment_time)} · 30 min</span>
                         <span>{w.service_name || 'No specific service'}</span>
                         {w.service_price && <span style={{color:'#d4af37',fontWeight:600}}>₱{parseFloat(w.service_price).toFixed(0)}</span>}
                       </div>
@@ -229,35 +219,6 @@ export default function BarbershopAppointments() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Rate Customer Modal */}
-        {rateModal && (
-          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
-            <div style={{background:'#1a2234',padding:24,borderRadius:10,maxWidth:420,width:'100%',border:'1px solid #2d3748'}}>
-              <h3 style={{color:'#d4af37',marginTop:0}}>Rate {rateModal.customer_name}</h3>
-              <form onSubmit={submitRating}>
-                <div style={{marginBottom:14}}>
-                  <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Rating</label>
-                  <div style={{display:'flex',gap:6}}>
-                    {[1,2,3,4,5].map(n => (
-                      <button key={n} type="button" onClick={() => setRateForm(p => ({...p, rating: n}))} style={{background:'none',border:'none',cursor:'pointer',padding:4}}>
-                        <Star size={28} fill={n <= rateForm.rating ? '#d4af37' : 'none'} color="#d4af37" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{marginBottom:14}}>
-                  <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Comment (optional)</label>
-                  <textarea value={rateForm.comment} onChange={e => setRateForm(p => ({...p, comment: e.target.value}))} rows={3} style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,boxSizing:'border-box'}} placeholder="On time, polite..."/>
-                </div>
-                <div style={{display:'flex',gap:10}}>
-                  <button type="submit" style={{flex:1,padding:'10px',background:'#d4af37',color:'#0f1422',border:'none',borderRadius:6,fontWeight:700,cursor:'pointer'}}>Submit Rating</button>
-                  <button type="button" onClick={() => setRateModal(null)} style={{flex:1,padding:'10px',background:'transparent',color:'#8b92a9',border:'1px solid #2d3748',borderRadius:6,cursor:'pointer'}}>Cancel</button>
-                </div>
-              </form>
-            </div>
           </div>
         )}
 

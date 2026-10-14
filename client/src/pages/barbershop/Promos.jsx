@@ -9,7 +9,7 @@ export default function BarbershopPromos() {
   const [barbers, setBarbers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // 'add' | promo object | null
-  const [form, setForm] = useState({ name: '', description: '', points_cost: 10, barber_id: '' });
+  const [form, setForm] = useState({ name: '', description: '', points_cost: 10, real_price: '', barber_id: '', service_id: '' });
   const [imgFile, setImgFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -31,20 +31,23 @@ export default function BarbershopPromos() {
     fetchBarbers();
   }, []);
 
-  const openAdd = () => { setForm({ name:'', description:'', points_cost: 10, barber_id: '' }); setImgFile(null); setModal('add'); };
-  const openEdit = (p) => { setForm({ name: p.name, description: p.description || '', points_cost: p.points_cost, barber_id: p.barber_id ? String(p.barber_id) : '' }); setImgFile(null); setModal(p); };
+  const openAdd = () => { setForm({ name:'', description:'', points_cost: 10, real_price: '', barber_id: '', service_id: '' }); setImgFile(null); setModal('add'); };
+  const openEdit = (p) => { setForm({ name: p.name, description: p.description || '', points_cost: p.points_cost, real_price: p.real_price ?? '', barber_id: p.barber_id ? String(p.barber_id) : '', service_id: p.service_id ? String(p.service_id) : '' }); setImgFile(null); setModal(p); };
 
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error('Name is required');
     if (!form.points_cost || form.points_cost < 1) return toast.error('Points cost must be at least 1');
+    if (!Number.isFinite(Number(form.real_price)) || Number(form.real_price) <= 0) return toast.error('Real price must be greater than 0');
     setSaving(true);
     try {
       const fd = new FormData();
       fd.append('name', form.name);
       fd.append('description', form.description || '');
       fd.append('points_cost', form.points_cost);
+      fd.append('real_price', form.real_price);
       fd.append('barber_id', form.barber_id || '');
+      fd.append('service_id', form.service_id || '');
       if (imgFile) fd.append('image', imgFile);
       const config = { headers: { 'Content-Type': 'multipart/form-data' } };
       if (modal === 'add') await api.post('/loyalty-promos/me', fd, config);
@@ -101,6 +104,10 @@ export default function BarbershopPromos() {
                 <div style={{padding:14}}>
                   <div style={{fontWeight:700,color:'#f0f0f0',marginBottom:4}}>{p.name}</div>
                   {p.description && <div style={{fontSize:12,color:'#8b92a9',marginBottom:8}}>{p.description}</div>}
+                  <div style={{fontSize:13,color:'#10b981',fontWeight:600,marginBottom:8}}>
+                    Real value: ₱{Number(p.real_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  {p.service_name && <div style={{fontSize:12,color:'#cbd5e1',marginBottom:8}}>Service: {p.service_name}</div>}
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexWrap:'wrap',gap:6}}>
                     <div style={{display:'inline-flex',alignItems:'center',gap:4,padding:'4px 10px',background:'rgba(212,175,55,0.15)',color:'#d4af37',border:'1px solid rgba(212,175,55,0.4)',borderRadius:4,fontWeight:700,fontSize:13}}>
                       <Gift size={12}/> {p.points_cost} pts
@@ -157,16 +164,31 @@ export default function BarbershopPromos() {
               <small style={{color:'#8b92a9',fontSize:11}}>Customers earn 1 point per completed appointment.</small>
             </div>
 
+            <div style={{marginBottom:14}}>
+              <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>Real promo value (₱) *</label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={form.real_price}
+                onChange={e => setForm(p => ({...p, real_price: e.target.value}))}
+                placeholder="e.g. 150.00"
+                style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,boxSizing:'border-box'}}
+              />
+              <small style={{color:'#8b92a9',fontSize:11}}>The peso value of the reward. This value is recorded for each redemption and shown in your dashboard.</small>
+            </div>
+
             {/* Barber assignment */}
             <div style={{marginBottom:14}}>
               <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>
                 Assigned Barber <span style={{color:'#6b7280',fontWeight:400,fontSize:11}}>(optional — leave blank for any barber)</span>
               </label>
-              <select value={form.barber_id} onChange={e => setForm(p => ({...p, barber_id: e.target.value}))} style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,boxSizing:'border-box'}}>
+              <select value={form.barber_id} onChange={e => setForm(p => ({...p, barber_id: e.target.value, service_id: ''}))} style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,boxSizing:'border-box'}}>
                 <option value="">Any barber</option>
                 {barbers.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.name} — {b.is_available ? 'Available' : 'Busy'}
+                    {b.name} — {b.is_available ? '✓ Available' : '✗ Busy'}
                   </option>
                 ))}
               </select>
@@ -179,6 +201,26 @@ export default function BarbershopPromos() {
                   </span>
                 </div>
               )}
+            </div>
+
+            <div style={{marginBottom:14}}>
+              <label style={{color:'#8b92a9',fontSize:13,display:'block',marginBottom:6}}>
+                Reward Service <span style={{color:'#6b7280',fontSize:11}}>(optional)</span>
+              </label>
+              <select
+                value={form.service_id}
+                disabled={!form.barber_id || !selectedBarber?.services?.length}
+                onChange={e => setForm(p => ({...p, service_id: e.target.value}))}
+                style={{width:'100%',background:'#0f1422',border:'1px solid #2d3748',color:'#f0f0f0',padding:10,borderRadius:6,boxSizing:'border-box'}}
+              >
+                <option value="">{form.barber_id ? 'No specific service' : 'Choose a barber to see offered services'}</option>
+                {(selectedBarber?.services || []).map(service => (
+                  <option key={service.id} value={service.id}>
+                    {service.name} — ₱{Number(service.price).toFixed(2)}
+                  </option>
+                ))}
+              </select>
+              <small style={{color:'#8b92a9',fontSize:11}}>Choose a barber first to link this reward to one of their offered shop services.</small>
             </div>
 
             <div style={{marginBottom:18}}>

@@ -17,7 +17,7 @@ Required env vars: `NEON_DATABASE_URL`, `JWT_SECRET` (Replit secrets). Optional:
 - **Dev tooling**: concurrently, nodemon
 
 ## Where things live
-- `client/src/pages/customer/` — Booking, History, Explore, Profile, BarbershopView, Dashboard, Appointments, QueueView
+- `client/src/pages/customer/` — Booking, History, Profile, BarbershopView, Dashboard, Appointments, QueueView
 - `client/src/pages/barbershop/` — Dashboard, Appointments, Barbers, Services, Queue, Settings, Reviews, Promos
 - `client/src/pages/barber/` — Dashboard, Profile (with account credentials tab), Reviews, Services (full CRUD)
 - `client/src/pages/admin/` — Login, Dashboard, Barbershops, Reports, Settings (QR upload), Layout

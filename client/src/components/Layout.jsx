@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
-import { Scissors, Bell, LogOut, Menu, X, Home, Calendar, Clock, Star, User, Settings, Users, Briefcase, LayoutDashboard, MessageSquare, ChevronRight, Gift, History, Sparkles } from 'lucide-react';
+import { Scissors, Bell, LogOut, Menu, X, Home, Calendar, Clock, Star, User, Settings, Users, Briefcase, LayoutDashboard, MessageSquare, ChevronRight, Gift, History } from 'lucide-react';
 import styles from './Layout.module.css';
 
 export default function Layout({ children }) {
@@ -28,9 +28,8 @@ export default function Layout({ children }) {
   const isSolo = isShop && !!user?.is_solo;
 
   const customerLinks = [
-    { to: '/customer/dashboard', icon: <Home size={18} />, label: 'Home' },
-    { to: '/customer/explore', icon: <Scissors size={18} />, label: 'Explore' },
-    { to: '/customer/recommendations', icon: <Sparkles size={18} />, label: 'For You' },
+    { to: '/customer/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
+    { to: '/customer/explore', icon: <Scissors size={18} />, label: 'For You' },
     { to: '/customer/appointments', icon: <Calendar size={18} />, label: 'Appointments' },
     { to: '/customer/history', icon: <Clock size={18} />, label: 'History' },
     { to: '/customer/profile', icon: <User size={18} />, label: 'Profile' },
@@ -91,7 +90,7 @@ export default function Layout({ children }) {
         const newStatus = liveActive ? 'active' : 'inactive';
         updateUserRef.current({ subscription_status: newStatus });
         if (!liveActive && localActive) {
-          toast('Your subscription has expired. Please renew to continue.', { duration: 6000 });
+          toast('Your subscription has expired. Please renew to continue.', { icon: '⏰', duration: 6000 });
         }
       }
     } catch {}

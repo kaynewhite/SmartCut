@@ -16,8 +16,7 @@
     "react-hot-toast": "^2.4.1",
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.24.0",
-    "recharts": "^2.12.7",
-    "socket.io-client": "^4.8.3"
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

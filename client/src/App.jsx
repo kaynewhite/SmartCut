@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { SocketProvider } from './context/SocketContext';
 
 import Landing from './pages/Landing';
 import ShopPreview from './pages/ShopPreview';
@@ -16,7 +15,6 @@ import CustomerAppointments from './pages/customer/Appointments';
 import CustomerHistory from './pages/customer/History';
 import CustomerProfile from './pages/customer/Profile';
 import CustomerQueue from './pages/customer/QueueView';
-import CustomerRecommendations from './pages/customer/Recommendations';
 
 import BarbershopLogin from './pages/barbershop/Login';
 import BarbershopRegister from './pages/barbershop/Register';
@@ -108,7 +106,6 @@ function AppRoutes() {
       <Route path="/customer/history" element={<ProtectedCustomer><CustomerHistory /></ProtectedCustomer>} />
       <Route path="/customer/profile" element={<ProtectedCustomer><CustomerProfile /></ProtectedCustomer>} />
       <Route path="/customer/queue/:shopId" element={<ProtectedCustomer><CustomerQueue /></ProtectedCustomer>} />
-      <Route path="/customer/recommendations" element={<ProtectedCustomer><CustomerRecommendations /></ProtectedCustomer>} />
 
       <Route path="/barbershop/login" element={user ? <Navigate to={dashFor(user.type)} /> : <BarbershopLogin />} />
       <Route path="/barbershop/register" element={user ? <Navigate to={dashFor(user.type)} /> : <BarbershopRegister />} />
@@ -136,15 +133,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <BrowserRouter>
-          <Toaster position="top-right" toastOptions={{
-            style: { background: '#1a2234', color: '#f0f0f0', border: '1px solid #2d3748' },
-            success: { iconTheme: { primary: '#d4af37', secondary: '#1a2234' } }
-          }} />
-          <AppRoutes />
-        </BrowserRouter>
-      </SocketProvider>
+      <BrowserRouter>
+        <Toaster position="top-right" toastOptions={{
+          style: { background: '#1a2234', color: '#f0f0f0', border: '1px solid #2d3748' },
+          success: { iconTheme: { primary: '#d4af37', secondary: '#1a2234' } }
+        }} />
+        <AppRoutes />
+      </BrowserRouter>
     </AuthProvider>
   );
 }
