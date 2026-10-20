@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
-const path = require('path');
 const { authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
 const { resolveActingBarberId } = require('../utils/soloBarber');
+const { createUpload } = require('../utils/upload');
 
 const SERVICE_CATEGORIES = new Set(['haircut', 'beard', 'shave', 'color', 'treatment', 'kids', 'massage', 'other']);
 
@@ -17,11 +16,7 @@ function isValidCategory(category) {
   return SERVICE_CATEGORIES.has(normalizeCategory(category));
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `svc_${Date.now()}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = createUpload();
 
 // PUBLIC: list services for a shop (only priced + active)
 router.get('/', async (req, res) => {
@@ -100,7 +95,7 @@ router.post('/by-barber', authenticateBarbershopOrBarber, upload.single('image')
     const barber = await pool.query('SELECT barbershop_id FROM barbers WHERE id = $1', [barberId]);
     if (!barber.rows.length) return res.status(404).json({ message: 'Barber not found' });
     const shopId = barber.rows[0].barbershop_id;
-    const image_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const image_url = req.file ? req.file.path : null;
     const result = await pool.query(
       `INSERT INTO services (barbershop_id, name, description, price, duration_minutes, category, image_url, is_home_service, created_by_barber_id, is_active)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true) RETURNING *`,
@@ -132,7 +127,7 @@ router.put('/by-barber/:id', authenticateBarbershopOrBarber, upload.single('imag
     );
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found or not your service' });
     const old = existing.rows[0];
-    const image_url = req.file ? `/uploads/${req.file.filename}` : old.image_url;
+    const image_url = req.file ? req.file.path : old.image_url;
     const result = await pool.query(
       `UPDATE services SET name=$1, description=$2, price=$3, duration_minutes=$4, category=$5, image_url=$6, is_active=$7, is_home_service=$8
        WHERE id=$9 AND created_by_barber_id=$10 RETURNING *`,
@@ -221,7 +216,7 @@ router.put('/:id', authenticateBarbershop, async (req, res) => {
 router.post('/:id/image', authenticateBarbershop, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'Choose an image to upload' });
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = req.file.path;
     const result = await pool.query(
       'UPDATE services SET image_url=$1 WHERE id=$2 AND barbershop_id=$3 RETURNING *',
       [imageUrl, req.params.id, req.user.id]

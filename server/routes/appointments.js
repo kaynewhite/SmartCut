@@ -1,24 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
-const path = require('path');
 const { authenticateCustomer, authenticateBarbershop, authenticateBarbershopOrBarber } = require('../middleware/auth');
 const { getBookedSlots, isSlotAvailable, isDateAvailable, getBusinessHours, isValidDate, isWithinBookingWindow } = require('../utils/scheduling');
-
-const imageFileFilter = (req, file, cb) => {
-  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `proof_${Date.now()}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+const { createUpload } = require('../utils/upload');
+const upload = createUpload();
 
 // PUBLIC: top services (for customer explore/dashboard)
 router.get('/top-services', async (req, res) => {
@@ -450,7 +436,7 @@ router.post('/:id/payment-proof', authenticateCustomer, upload.single('proof'), 
   try {
     if (!req.file) return res.status(400).json({ message: 'No file' });
     const { payment_method } = req.body;
-    const url = `/uploads/${req.file.filename}`;
+    const url = req.file.path;
     const result = await pool.query(
       `UPDATE appointments SET payment_proof_url=$1, payment_status='pending_verification' WHERE id=$2 AND customer_id=$3 RETURNING *`,
       [url, req.params.id, req.user.id]

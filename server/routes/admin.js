@@ -1,23 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
-const path = require('path');
 const { authenticateAdmin } = require('../middleware/auth');
-
-const imageFileFilter = (req, file, cb) => {
-  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `admin_${Date.now()}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+const { createUpload } = require('../utils/upload');
+const upload = createUpload();
 
 // ADMIN: dashboard stats
 router.get('/dashboard', authenticateAdmin, async (req, res) => {
@@ -367,7 +353,7 @@ router.post('/qr', authenticateAdmin, upload.single('qr'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file' });
     const { type, account_name } = req.body;
-    const qr_url = `/uploads/${req.file.filename}`;
+    const qr_url = req.file.path;
     await pool.query('UPDATE admin_qr_codes SET is_active = false WHERE admin_id = $1', [req.user.id]);
     const result = await pool.query(
       `INSERT INTO admin_qr_codes (admin_id, type, account_name, qr_url) VALUES ($1,$2,$3,$4) RETURNING *`,

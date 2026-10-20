@@ -1,24 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
-const path = require('path');
 const bcrypt = require('bcryptjs');
 const { authenticateBarbershop } = require('../middleware/auth');
-
-const imageFileFilter = (req, file, cb) => {
-  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.fieldname}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+const { createUpload } = require('../utils/upload');
+const upload = createUpload();
 
 // PUBLIC: list barbershops — only active + subscribed
 router.get('/', async (req, res) => {
@@ -386,7 +372,7 @@ router.post('/me/appeal', authenticateBarbershop, async (req, res) => {
 router.post('/me/logo', authenticateBarbershop, upload.single('logo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const url = `/uploads/${req.file.filename}`;
+    const url = req.file.path;
     await pool.query('UPDATE barbershops SET logo_url = $1 WHERE id = $2', [url, req.user.id]);
     res.json({ logo_url: url });
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
@@ -396,7 +382,7 @@ router.post('/me/logo', authenticateBarbershop, upload.single('logo'), async (re
 router.post('/me/cover', authenticateBarbershop, upload.single('cover'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const url = `/uploads/${req.file.filename}`;
+    const url = req.file.path;
     await pool.query('UPDATE barbershops SET cover_url = $1 WHERE id = $2', [url, req.user.id]);
     res.json({ cover_url: url });
   } catch (err) { res.status(500).json({ message: 'Server error' }); }

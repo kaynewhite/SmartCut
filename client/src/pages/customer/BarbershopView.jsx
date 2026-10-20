@@ -7,6 +7,7 @@ import Map from '../../components/Map';
 import { Star, MapPin, Clock, Phone, Scissors, Users, ChevronRight, Gift, CheckCircle, X, Calendar } from 'lucide-react';
 import styles from './BarbershopView.module.css';
 import { formatTime } from '../../utils/time';
+import { isShopOpen } from '../../utils/shopHours';
 
 export default function CustomerBarbershop() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function CustomerBarbershop() {
   const [promos, setPromos] = useState([]);
   const [redeeming, setRedeeming] = useState(null);
   const [bookPrompt, setBookPrompt] = useState(null); // { promo, redemption_code, barber_id }
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
   const refreshLoyalty = () => {
     api.get(`/loyalty-promos/balance/${id}`).then(r => setPoints(r.data.points || 0)).catch(() => {});
@@ -28,6 +30,11 @@ export default function CustomerBarbershop() {
     api.get(`/barbershops/${id}`).then(res => { setData(res.data); setLoading(false); }).catch(() => setLoading(false));
     refreshLoyalty();
   }, [id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const redeem = async (promo) => {
     if (points < promo.points_cost) return toast.error(`You have ${points} pts, need ${promo.points_cost}`);
@@ -55,6 +62,7 @@ export default function CustomerBarbershop() {
   if (!data) return <Layout><div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Barbershop not found.</div></Layout>;
 
   const { shop, barbers = [], services = [], reviews = [] } = data;
+  const shopIsOpen = isShopOpen(shop.opening_time, shop.closing_time, currentTime);
   const categories = [...new Set((services || []).map(s => s.category).filter(Boolean))];
 
   return (
@@ -72,6 +80,9 @@ export default function CustomerBarbershop() {
                   {shop.city && <span><MapPin size={13} /> {shop.city}</span>}
                   <span><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(shop.avg_rating).toFixed(1)} ({shop.review_count} reviews)</span>
                   {shop.opening_time && <span><Clock size={13} /> {formatTime(shop.opening_time)} – {formatTime(shop.closing_time)}</span>}
+                  <span style={{ color: shopIsOpen ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                    {shopIsOpen ? 'Open now' : 'Closed'}
+                  </span>
                 </div>
               </div>
               <Link to={`/customer/book/${id}`} className={styles.bookBtn}>Book Now <ChevronRight size={16} /></Link>

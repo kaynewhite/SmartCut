@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../utils/api';
 import { Scissors, Star, MapPin, Clock, Phone, ChevronRight, Users, ArrowLeft, User } from 'lucide-react';
 import styles from './ShopPreview.module.css';
+import { isShopOpen } from '../utils/shopHours';
 
 function StarRow({ value, size = 14 }) {
   const n = parseFloat(value) || 0;
@@ -33,12 +34,18 @@ export default function ShopPreview() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('services');
   const [catFilter, setCatFilter] = useState('All');
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
   useEffect(() => {
     api.get(`/barbershops/${id}`)
       .then(r => { setData(r.data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) return (
     <div className={styles.splash}>
@@ -54,6 +61,7 @@ export default function ShopPreview() {
   );
 
   const { shop, barbers = [], services = [], reviews = [] } = data;
+  const shopIsOpen = isShopOpen(shop.opening_time, shop.closing_time, currentTime);
   const usedCats = ['All', ...new Set(services.map(s => s.category).filter(Boolean))];
   const filteredServices = catFilter === 'All' ? services : services.filter(s => s.category === catFilter);
 
@@ -84,6 +92,9 @@ export default function ShopPreview() {
                 {shop.city && <span className={styles.metaItem}><MapPin size={13} />{shop.city}{shop.address ? `, ${shop.address}` : ''}</span>}
                 <span className={styles.metaItem}><Star size={13} fill="#f59e0b" color="#f59e0b" /> {parseFloat(shop.avg_rating || 0).toFixed(1)} <span style={{ opacity: 0.6 }}>({shop.review_count} reviews)</span></span>
                 {shop.opening_time && <span className={styles.metaItem}><Clock size={13} />{shop.opening_time?.slice(0,5)} – {shop.closing_time?.slice(0,5)}</span>}
+                <span className={styles.metaItem} style={{ color: shopIsOpen ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                  {shopIsOpen ? 'Open now' : 'Closed'}
+                </span>
                 {shop.phone && <span className={styles.metaItem}><Phone size={13} />{shop.phone}</span>}
               </div>
             </div>

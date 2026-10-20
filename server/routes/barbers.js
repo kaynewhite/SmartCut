@@ -2,24 +2,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const bcrypt = require('bcryptjs');
-const multer = require('multer');
-const path = require('path');
 const { authenticateBarbershop, authenticateBarber, authenticateBarbershopOrBarber } = require('../middleware/auth');
 const { resolveActingBarberId } = require('../utils/soloBarber');
-
-const imageFileFilter = (req, file, cb) => {
-  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `barber_${Date.now()}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+const { createUpload } = require('../utils/upload');
+const upload = createUpload();
 
 // PUBLIC: get barbers for a barbershop with their services
 router.get('/', async (req, res) => {
@@ -94,7 +80,7 @@ router.put('/me/profile', authenticateBarbershopOrBarber, upload.single('photo')
     const { bio, phone, specialties, service_ids } = req.body;
     const existing = await pool.query('SELECT * FROM barbers WHERE id = $1', [barberId]);
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
-    const photo_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].photo_url;
+    const photo_url = req.file ? req.file.path : existing.rows[0].photo_url;
     await pool.query(
       `UPDATE barbers SET bio=$1, phone=$2, photo_url=$3 WHERE id=$4`,
       [bio ?? existing.rows[0].bio, phone ?? existing.rows[0].phone, photo_url, barberId]
@@ -172,7 +158,7 @@ router.post('/', authenticateBarbershop, upload.single('photo'), async (req, res
     if (shopRes.rows[0]?.is_solo) {
       return res.status(400).json({ message: 'Solo Operator Mode is enabled. Disable it in Settings to add more barbers.' });
     }
-    const photo_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const photo_url = req.file ? req.file.path : null;
     let hashedPwd = null, normalizedEmail = null;
     if (email) {
       normalizedEmail = email.toLowerCase().trim();
@@ -204,7 +190,7 @@ router.put('/:id', authenticateBarbershop, upload.single('photo'), async (req, r
     if (!existing.rows.length) return res.status(404).json({ message: 'Not found' });
     const eventPrice = event_price === undefined ? Number(existing.rows[0].event_price) : Number(event_price);
     if (!Number.isFinite(eventPrice) || eventPrice < 0) return res.status(400).json({ message: 'Event price must be zero or greater' });
-    const photo_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].photo_url;
+    const photo_url = req.file ? req.file.path : existing.rows[0].photo_url;
     let updateEmail = existing.rows[0].email, updatePassword = existing.rows[0].password;
     if (email !== undefined) {
       const normalized = email ? email.toLowerCase().trim() : null;

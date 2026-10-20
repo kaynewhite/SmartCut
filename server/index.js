@@ -9,8 +9,8 @@ const pool = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const legacyUploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(legacyUploadDir)) fs.mkdirSync(legacyUploadDir, { recursive: true });
 
 // Simple in-memory rate limiter (no external packages needed)
 const rateLimits = new Map();
@@ -31,8 +31,7 @@ function rateLimit(maxPerMinute) {
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(uploadDir));
-
+app.use('/uploads', express.static(legacyUploadDir));
 // Rate-limited routes
 app.use('/api/auth', rateLimit(20), require('./routes/auth'));
 app.use('/api/subscriptions', rateLimit(30), require('./routes/subscriptions'));
@@ -57,8 +56,15 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().t
 
 // Global multer error handler
 app.use((err, req, res, next) => {
-  if (err && err.message && (err.message.includes('Only image') || err.code === 'LIMIT_FILE_SIZE')) {
+  if (err && err.message && err.message.includes('Only image')) {
     return res.status(400).json({ message: err.message || 'File upload error' });
+  }
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ message: 'Images must be 5 MB or smaller' });
+  }
+  if (err?.code === 'CLOUDINARY_NOT_CONFIGURED' || err?.code === 'CLOUDINARY_UPLOAD_FAILED') {
+    console.error('Image upload error:', err.cause || err);
+    return res.status(503).json({ message: 'Image upload is temporarily unavailable. Please try again later.' });
   }
   next(err);
 });

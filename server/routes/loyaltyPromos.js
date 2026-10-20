@@ -1,23 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
-const path = require('path');
 const { authenticateBarbershop, authenticateCustomer } = require('../middleware/auth');
-
-const imageFileFilter = (req, file, cb) => {
-  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `promo_${Date.now()}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+const { createUpload } = require('../utils/upload');
+const upload = createUpload();
 
 // PUBLIC: list active promos (optionally filter by shop)
 router.get('/', async (req, res) => {
@@ -68,7 +54,7 @@ router.post('/me', authenticateBarbershop, upload.single('image'), async (req, r
     if (!Number.isFinite(realPrice) || realPrice <= 0 || realPrice > 99999999.99) {
       return res.status(400).json({ message: 'Real price must be greater than 0 and no more than 99,999,999.99' });
     }
-    const image_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const image_url = req.file ? req.file.path : null;
     const barberId = barber_id && barber_id !== '' ? parseInt(barber_id) : null;
     const serviceId = service_id && service_id !== '' ? parseInt(service_id) : null;
     if (barberId !== null && !Number.isInteger(barberId)) return res.status(400).json({ message: 'Invalid barber' });
@@ -109,7 +95,7 @@ router.put('/me/:id', authenticateBarbershop, upload.single('image'), async (req
         return res.status(400).json({ message: 'Real price must be greater than 0 and no more than 99,999,999.99' });
       }
     }
-    const image_url = req.file ? `/uploads/${req.file.filename}` : existing.rows[0].image_url;
+    const image_url = req.file ? req.file.path : existing.rows[0].image_url;
     const barberId = barber_id === '' ? null : (barber_id !== undefined ? parseInt(barber_id) : existing.rows[0].barber_id);
     const serviceId = service_id === '' ? null : (service_id !== undefined ? parseInt(service_id) : existing.rows[0].service_id);
     if (barberId !== null && !Number.isInteger(barberId)) return res.status(400).json({ message: 'Invalid barber' });

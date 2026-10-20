@@ -1,23 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const multer = require('multer');
-const path = require('path');
 const { authenticate, authenticateCustomer, authenticateBarbershop } = require('../middleware/auth');
-
-const imageFileFilter = (req, file, cb) => {
-  if (['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
-  }
-};
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => cb(null, `sub_proof_${Date.now()}${path.extname(file.originalname)}`)
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: imageFileFilter });
+const { createUpload } = require('../utils/upload');
+const upload = createUpload();
 
 // Check own subscription status (also auto-expires if needed)
 router.get('/status', authenticate, async (req, res) => {
@@ -58,7 +44,7 @@ router.post('/request', authenticate, upload.single('proof'), async (req, res) =
       [type, id]
     );
     if (pending.rows.length) return res.status(400).json({ message: 'You already have a pending subscription request' });
-    const url = `/uploads/${req.file.filename}`;
+    const url = req.file.path;
     const result = await pool.query(
       `INSERT INTO subscriptions (subscriber_type, subscriber_id, payment_proof_url) VALUES ($1,$2,$3) RETURNING *`,
       [type, id, url]
