@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import Map from '../../components/Map';
 import toast from 'react-hot-toast';
-import { ArrowRight, Crosshair, Home, Lock, MapIcon, MapPin, Search, Scissors, Star, List, X, Upload } from 'lucide-react';
+import { ArrowRight, Home, MapIcon, MapPin, Search, Scissors, Star, List } from 'lucide-react';
 import { SERVICE_CATEGORIES } from '../../constants/serviceCategories';
 import styles from './Explore.module.css';
 
@@ -22,7 +21,6 @@ const getDistanceKm = (lat1, lon1, lat2, lon2) => {
 };
 
 export default function CustomerExplore() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [shops, setShops] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,35 +37,17 @@ export default function CustomerExplore() {
   const [view, setView] = useState('list');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [specialtyOptions, setSpecialtyOptions] = useState([]);
-  const [showSubModal, setShowSubModal] = useState(false);
-  const [adminQr, setAdminQr] = useState(null);
-  const [proofFile, setProofFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [subStatus, setSubStatus] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
-  const isSubscribed = subStatus !== null ? subStatus.is_active === true : user?.subscription_status === 'active';
 
   useEffect(() => {
     try {
       const savedLocation = JSON.parse(localStorage.getItem(LOCATION_STORAGE_KEY));
       if (Array.isArray(savedLocation) && savedLocation.length === 2 && savedLocation.every(Number.isFinite)) {
         setUserLocation(savedLocation);
-        return;
       }
     } catch {
       localStorage.removeItem(LOCATION_STORAGE_KEY);
     }
-
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const location = [coords.latitude, coords.longitude];
-        setUserLocation(location);
-        localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(location));
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5 * 60 * 1000 }
-    );
   }, []);
 
   const setCustomerLocation = coordinates => {
@@ -75,20 +55,6 @@ export default function CustomerExplore() {
     localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(coordinates));
     setShowLocationPicker(false);
     toast.success('Your location has been set');
-  };
-
-  const useDeviceLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Location services are not available in this browser');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setCustomerLocation([coords.latitude, coords.longitude]),
-      error => toast.error(error.code === error.PERMISSION_DENIED
-        ? 'Location access was denied. You can set your location on the map instead.'
-        : 'Could not determine your location. Try placing a pin on the map.'),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5 * 60 * 1000 }
-    );
   };
 
   const recommendedShops = useMemo(() => [...shops].map(shop => {
@@ -150,8 +116,6 @@ export default function CustomerExplore() {
   useEffect(() => {
     fetchShops();
     api.get('/barbers/specialties').then(response => setSpecialtyOptions(response.data || [])).catch(() => {});
-    api.get('/admin/qr').then(response => setAdminQr(response.data)).catch(() => {});
-    api.get('/subscriptions/status').then(response => setSubStatus(response.data)).catch(() => {});
   }, []);
 
   const clearFilters = () => {
@@ -176,26 +140,6 @@ export default function CustomerExplore() {
     availableOnly, homeServiceOnly, sort !== 'recommended'
   ].filter(Boolean).length;
 
-  const handleSubRequest = async event => {
-    event.preventDefault();
-    if (!proofFile) return;
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('proof', proofFile);
-      await api.post('/subscriptions/request', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const response = await api.get('/subscriptions/status');
-      setSubStatus(response.data);
-      setProofFile(null);
-      setShowSubModal(false);
-      toast.success('Subscription request submitted! Admin will review within 24 hours.');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to submit');
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
     <Layout>
       <div className={styles.page}>
@@ -209,12 +153,9 @@ export default function CustomerExplore() {
           <div className={styles.searchHeading}>
             <div>
               <h2>Find your barbershop</h2>
-              <p>Choose your location, then narrow shops by services, price, and availability.</p>
+              <p>Place a pin to sort by distance, then narrow shops by services, price, and availability.</p>
             </div>
             <div className={styles.locationActions}>
-              <button type="button" className={styles.locationButton} onClick={useDeviceLocation}>
-                <Crosshair size={15} /> Use my location
-              </button>
               <button type="button" className={styles.locationButton} onClick={() => setShowLocationPicker(open => !open)}>
                 <MapPin size={15} /> {showLocationPicker ? 'Close map' : userLocation ? 'Change location' : 'Set location'}
               </button>
@@ -325,12 +266,8 @@ export default function CustomerExplore() {
             <button type="button" className={`${styles.viewBtn} ${view === 'list' ? styles.active : ''}`} onClick={() => setView('list')}>
               <List size={16} /> List
             </button>
-            <button type="button" className={`${styles.viewBtn} ${view === 'map' && isSubscribed ? styles.active : ''}`} onClick={() => {
-              if (isSubscribed) setView('map');
-              else setShowSubModal(true);
-            }}>
-              {isSubscribed ? <MapIcon size={16} /> : <Lock size={16} />} Map
-              {!isSubscribed && <span className={styles.subscriberTag}>Pro</span>}
+            <button type="button" className={`${styles.viewBtn} ${view === 'map' ? styles.active : ''}`} onClick={() => setView('map')}>
+              <MapIcon size={16} /> Map
             </button>
           </div>
         </div>
@@ -366,55 +303,17 @@ export default function CustomerExplore() {
           </div>
         ))}
 
-        {view === 'map' && isSubscribed && (
+        {view === 'map' && (
           <div className={styles.mapContainer}>
             <Map
-              markers={recommendedShops.filter(shop => shop.latitude && shop.longitude)}
+              markers={recommendedShops.filter(shop => Number.isFinite(Number(shop.latitude)) &&
+                Number.isFinite(Number(shop.longitude)) && (Number(shop.latitude) !== 0 || Number(shop.longitude) !== 0))}
               height="600px"
               onMarkerClick={marker => navigate(`/customer/barbershop/${marker.id}`)}
             />
           </div>
         )}
       </div>
-
-      {showSubModal && (
-        <div className={styles.modalBackdrop}>
-          <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <h2><MapIcon size={21} /> Unlock Map View</h2>
-              <button type="button" onClick={() => setShowSubModal(false)} aria-label="Close"><X size={18} /></button>
-            </div>
-            {subStatus?.subscription?.status === 'pending' ? (
-              <div className={styles.pending}>
-                <strong>Subscription Pending Review</strong>
-                <p>Your subscription request is awaiting admin approval.</p>
-              </div>
-            ) : (
-              <>
-                <p className={styles.modalCopy}>Subscribe to unlock the interactive map. Subscriptions are ₱99/month.</p>
-                {adminQr && (
-                  <div className={styles.qrBox}>
-                    <strong>Pay via {adminQr.type}</strong>
-                    {adminQr.account_name && <div>{adminQr.account_name}</div>}
-                    <img src={adminQr.qr_url} alt="Payment QR" />
-                    <div>Scan and pay, then upload your receipt below.</div>
-                  </div>
-                )}
-                <form onSubmit={handleSubRequest}>
-                  <label className={styles.upload}>
-                    <Upload size={16} /> {proofFile ? proofFile.name : 'Upload payment receipt'}
-                    <input type="file" accept="image/*" onChange={event => setProofFile(event.target.files?.[0] || null)} />
-                  </label>
-                  <div className={styles.modalActions}>
-                    <button type="submit" disabled={uploading || !proofFile}>{uploading ? 'Submitting...' : 'Submit Request'}</button>
-                    <button type="button" onClick={() => setShowSubModal(false)}>Cancel</button>
-                  </div>
-                </form>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </Layout>
   );
 }

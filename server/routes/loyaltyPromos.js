@@ -146,45 +146,9 @@ router.get('/balance/:shopId', authenticateCustomer, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
-// AUTH (CUSTOMER): redeem a promo (uses points earned at THAT shop only)
+// AUTH (CUSTOMER): promo redemption must happen atomically with an appointment booking
 router.post('/:id/redeem', authenticateCustomer, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const promoR = await client.query('SELECT * FROM loyalty_promos WHERE id = $1 AND is_active = true', [req.params.id]);
-    if (!promoR.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Promo not available' }); }
-    const promo = promoR.rows[0];
-    const balR = await client.query(
-      'SELECT points FROM customer_shop_loyalty WHERE customer_id = $1 AND barbershop_id = $2 FOR UPDATE',
-      [req.user.id, promo.barbershop_id]
-    );
-    const balance = balR.rows[0]?.points || 0;
-    if (balance < promo.points_cost) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ message: `Not enough points at this shop. You have ${balance}, need ${promo.points_cost}.` });
-    }
-    const code = 'PR' + Math.random().toString(36).slice(2, 8).toUpperCase();
-    await client.query(
-      `INSERT INTO customer_shop_loyalty (customer_id, barbershop_id, points, updated_at)
-       VALUES ($1,$2,-$3,NOW())
-       ON CONFLICT (customer_id, barbershop_id) DO UPDATE SET points = customer_shop_loyalty.points - $3, updated_at = NOW()`,
-      [req.user.id, promo.barbershop_id, promo.points_cost]
-    );
-    await client.query(`INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description) VALUES ($1,$2,$3,'spent',$4)`,
-      [req.user.id, promo.barbershop_id, -promo.points_cost, `Redeemed: ${promo.name}`]);
-    const redR = await client.query(
-      `INSERT INTO promo_redemptions (customer_id, promo_id, barbershop_id, points_spent, promo_value, redemption_code)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.user.id, promo.id, promo.barbershop_id, promo.points_cost, promo.real_price, code]
-    );
-    await client.query(
-      `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id) VALUES ('barbershop',$1,'Promo Redeemed',$2,'promo_redeem',$3)`,
-      [promo.barbershop_id, `A customer redeemed "${promo.name}" with code ${code}`, redR.rows[0].id]
-    );
-    await client.query('COMMIT');
-    res.status(201).json({ ...redR.rows[0], promo_name: promo.name });
-  } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).json({ message: 'Server error' }); }
-  finally { client.release(); }
+  res.status(400).json({ message: 'Choose this promo during appointment booking so points are only spent when the booking succeeds.' });
 });
 
 // AUTH (CUSTOMER): list my redemptions

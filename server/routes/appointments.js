@@ -112,8 +112,12 @@ router.post('/', authenticateCustomer, async (req, res) => {
   try {
     const {
       barbershop_id, barber_id, service_id, appointment_date, appointment_time,
-      is_home_service, home_service_type, home_address, home_contact_name, home_contact_phone, home_service_notes, notes
+      is_home_service, home_service_type, home_address, home_contact_name, home_contact_phone, home_service_notes, notes, promo_id
     } = req.body;
+    const promoId = promo_id ? Number(promo_id) : null;
+    if (promoId !== null && (!Number.isInteger(promoId) || promoId < 1)) {
+      return res.status(400).json({ message: 'Invalid promo' });
+    }
     const bookingAtHome = is_home_service === true || is_home_service === 'true';
     const eventBooking = bookingAtHome && home_service_type === 'event';
     const homeType = bookingAtHome ? (eventBooking ? 'event' : 'personal') : null;
@@ -178,6 +182,41 @@ router.post('/', authenticateCustomer, async (req, res) => {
     await client.query('BEGIN');
     transactionStarted = true;
     await client.query('SELECT pg_advisory_xact_lock($1)', [parseInt(barbershop_id, 10)]);
+    let promo = null;
+    if (promoId) {
+      if (eventBooking) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(400).json({ message: 'Promos cannot be used for event bookings' });
+      }
+      const promoResult = await client.query(
+        'SELECT * FROM loyalty_promos WHERE id=$1 AND barbershop_id=$2 AND is_active=true FOR UPDATE',
+        [promoId, barbershop_id]
+      );
+      if (!promoResult.rows.length) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(400).json({ message: 'This promo is no longer available' });
+      }
+      promo = promoResult.rows[0];
+      if ((promo.service_id && Number(promo.service_id) !== Number(service_id)) ||
+          (promo.barber_id && Number(promo.barber_id) !== Number(barber_id))) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(400).json({ message: 'This promo must be booked with its assigned service and barber' });
+      }
+      const balanceResult = await client.query(
+        'SELECT points FROM customer_shop_loyalty WHERE customer_id=$1 AND barbershop_id=$2 FOR UPDATE',
+        [req.user.id, barbershop_id]
+      );
+      const balance = Number(balanceResult.rows[0]?.points || 0);
+      if (balance < promo.points_cost) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(400).json({ message: `Not enough points at this shop. You have ${balance}, need ${promo.points_cost}.` });
+      }
+      total_amount = 0;
+    }
     if (eventBooking) {
       const eventBarber = await client.query(
         'SELECT event_price FROM barbers WHERE id=$1 AND barbershop_id=$2 AND is_available=true FOR UPDATE',
@@ -218,18 +257,48 @@ router.post('/', authenticateCustomer, async (req, res) => {
       `INSERT INTO appointments (customer_id, barbershop_id, barber_id, service_id, appointment_date, appointment_time,
          is_home_service, home_service_type, is_event_booking, home_address, home_contact_name, home_contact_phone, home_service_notes, notes,
          total_amount, queue_number, status, payment_status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending','unpaid') RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending',$17) RETURNING *`,
       [req.user.id, barbershop_id, barber_id || null, eventBooking ? null : service_id, appointment_date, normalizedTime,
        bookingAtHome, homeType, eventBooking, bookingAtHome ? home_address.trim() : null,
        bookingAtHome ? home_contact_name.trim() : null, bookingAtHome ? home_contact_phone.trim() : null,
-       bookingAtHome ? (home_service_notes?.trim() || null) : null, notes || null, total_amount, queueRes.rows[0].q]
+       bookingAtHome ? (home_service_notes?.trim() || null) : null, notes || null, total_amount, queueRes.rows[0].q,
+       promo ? 'paid' : 'unpaid']
     );
     const appt = result.rows[0];
-    await client.query('COMMIT');
-    transactionStarted = false;
+    let promoRedemption = null;
+    if (promo) {
+      const balanceUpdate = await client.query(
+        `UPDATE customer_shop_loyalty SET points=points-$3, updated_at=NOW()
+         WHERE customer_id=$1 AND barbershop_id=$2 AND points >= $3 RETURNING points`,
+        [req.user.id, barbershop_id, promo.points_cost]
+      );
+      if (!balanceUpdate.rows.length) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(400).json({ message: 'Your points balance changed. Please refresh and try again.' });
+      }
+      await client.query(
+        `INSERT INTO loyalty_transactions (customer_id, barbershop_id, points, type, description)
+         VALUES ($1,$2,$3,'spent',$4)`,
+        [req.user.id, barbershop_id, -promo.points_cost, `Redeemed: ${promo.name} for appointment ${appt.id}`]
+      );
+      const code = 'PR' + Math.random().toString(36).slice(2, 8).toUpperCase();
+      const redemptionResult = await client.query(
+        `INSERT INTO promo_redemptions
+          (customer_id, promo_id, barbershop_id, points_spent, promo_value, redemption_code, appointment_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, redemption_code, points_spent`,
+        [req.user.id, promo.id, barbershop_id, promo.points_cost, promo.real_price, code, appt.id]
+      );
+      promoRedemption = { ...redemptionResult.rows[0], promo_name: promo.name };
+      await client.query(
+        `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
+         VALUES ('barbershop',$1,'Promo Booked',$2,'promo_redeem',$3)`,
+        [barbershop_id, `A customer booked "${promo.name}" with code ${code}`, redemptionResult.rows[0].id]
+      );
+    }
 
     // Notify barbershop
-    await pool.query(
+    await client.query(
       `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
        VALUES ('barbershop',$1,'📅 New Appointment Booked',$2,'new_booking',$3)`,
       [barbershop_id, `New ${eventBooking ? 'event' : bookingAtHome ? 'home service' : 'in-shop'} appointment booked for ${appointment_date}${eventBooking ? '' : ` at ${appointment_time}`}`, appt.id]
@@ -237,13 +306,16 @@ router.post('/', authenticateCustomer, async (req, res) => {
 
     // Notify assigned barber
     if (barber_id) {
-      await pool.query(
+      await client.query(
         `INSERT INTO notifications (recipient_type, recipient_id, title, message, type, related_id)
          VALUES ('barber',$1,'📅 New Appointment Assigned',$2,'new_booking',$3)`,
         [barber_id, [`You have a new ${eventBooking ? 'event ' : ''}appointment on ${appointment_date}`, eventBooking ? '' : ` at ${appointment_time}`].join(''), appt.id]
       );
     }
 
+    await client.query('COMMIT');
+    transactionStarted = false;
+    if (promoRedemption) appt.promo_redemption = promoRedemption;
     res.status(201).json(appt);
   } catch (err) {
     if (transactionStarted) await client.query('ROLLBACK');
@@ -260,12 +332,14 @@ router.get('/my', authenticateCustomer, async (req, res) => {
         b.qr_code_url as barbershop_qr, s.name as service_name, 30 as duration_minutes, s.price as service_price,
         s.image_url as service_image, s.category as service_category,
         br.name as barber_name, br.photo_url as barber_photo,
-        r.id as rating_id
+        r.id as rating_id, p.name as promo_name, pr.redemption_code, pr.points_spent as promo_points_spent
       FROM appointments a
       LEFT JOIN barbershops b ON b.id=a.barbershop_id
       LEFT JOIN services s ON s.id=a.service_id
       LEFT JOIN barbers br ON br.id=a.barber_id
       LEFT JOIN ratings r ON r.appointment_id=a.id AND r.customer_id=a.customer_id
+      LEFT JOIN promo_redemptions pr ON pr.appointment_id=a.id
+      LEFT JOIN loyalty_promos p ON p.id=pr.promo_id
       WHERE a.customer_id=$1
       ORDER BY a.appointment_date DESC, a.appointment_time DESC
     `, [req.user.id]);
@@ -317,12 +391,14 @@ router.get('/shop', authenticateBarbershopOrBarber, async (req, res) => {
         c.name as customer_name, c.phone as customer_phone, c.avatar_url as customer_avatar,
         c.no_show_count as customer_no_show_count, c.rating as customer_rating,
         s.name as service_name, s.price as service_price, 30 as duration_minutes, s.category as service_category,
-        br.name as barber_name,
+        br.name as barber_name, p.name as promo_name, pr.redemption_code, pr.points_spent as promo_points_spent,
         CASE WHEN a.is_event_booking THEN 'home_event' WHEN a.is_home_service THEN 'home_service' ELSE 'online' END as appointment_type
       FROM appointments a
       LEFT JOIN customers c ON c.id=a.customer_id
       LEFT JOIN services s ON s.id=a.service_id
       LEFT JOIN barbers br ON br.id=a.barber_id
+      LEFT JOIN promo_redemptions pr ON pr.appointment_id=a.id
+      LEFT JOIN loyalty_promos p ON p.id=pr.promo_id
       WHERE a.barbershop_id=$1
     `;
     const params = [shopId];

@@ -263,6 +263,201 @@ router.get('/me/profile', authenticateBarbershop, async (req, res) => {
   } catch (err) { res.status(500).json({ message: 'Server error' }); }
 });
 
+// AUTH: download a private backup of this shop's configuration and records
+router.get('/me/records/backup', authenticateBarbershop, async (req, res) => {
+  let client;
+  let transactionStarted = false;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    transactionStarted = true;
+    const shopResult = await client.query(
+      `SELECT id, name, email, phone, address, city, description, opening_time, closing_time,
+        qr_code_url, logo_url, cover_url, latitude, longitude, downpayment_percent, is_active,
+        subscription_status, rating, is_solo, solo_barber_id, loyalty_points_per_appointment,
+        loyalty_streak_bonus, loyalty_streak_every, created_at
+       FROM barbershops WHERE id=$1`,
+      [req.user.id]
+    );
+    if (!shopResult.rows.length) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ message: 'Barbershop not found' });
+    }
+
+    const queries = [
+      ['barbers', `SELECT id, barbershop_id, name, phone, bio, photo_url, event_price, is_available, rating, total_cuts, created_at
+        FROM barbers WHERE barbershop_id=$1 ORDER BY id`],
+      ['barber_specialties', `SELECT bs.* FROM barber_specialties bs
+        JOIN barbers b ON b.id=bs.barber_id WHERE b.barbershop_id=$1 ORDER BY bs.id`],
+      ['services', 'SELECT * FROM services WHERE barbershop_id=$1 ORDER BY id'],
+      ['barber_services', `SELECT bs.* FROM barber_services bs
+        JOIN barbers b ON b.id=bs.barber_id WHERE b.barbershop_id=$1 ORDER BY bs.barber_id, bs.service_id`],
+      ['payment_methods', 'SELECT * FROM payment_methods WHERE barbershop_id=$1 ORDER BY id'],
+      ['loyalty_promos', 'SELECT * FROM loyalty_promos WHERE barbershop_id=$1 ORDER BY id'],
+      ['appointments', 'SELECT * FROM appointments WHERE barbershop_id=$1 ORDER BY id'],
+      ['walk_ins', 'SELECT * FROM walk_ins WHERE barbershop_id=$1 ORDER BY id'],
+      ['ratings', 'SELECT * FROM ratings WHERE barbershop_id=$1 ORDER BY id'],
+      ['customer_ratings', 'SELECT * FROM customer_ratings WHERE barbershop_id=$1 ORDER BY id'],
+      ['barber_customer_ratings', `SELECT r.* FROM barber_customer_ratings r
+        JOIN barbers b ON b.id=r.barber_id WHERE b.barbershop_id=$1 ORDER BY r.id`],
+      ['customer_shop_loyalty', 'SELECT * FROM customer_shop_loyalty WHERE barbershop_id=$1 ORDER BY customer_id'],
+      ['loyalty_transactions', 'SELECT * FROM loyalty_transactions WHERE barbershop_id=$1 ORDER BY id'],
+      ['promo_redemptions', 'SELECT * FROM promo_redemptions WHERE barbershop_id=$1 ORDER BY id'],
+      ['notifications', `SELECT n.* FROM notifications n
+        WHERE (n.recipient_type='barbershop' AND n.recipient_id=$1)
+          OR (n.recipient_type='barber' AND n.recipient_id IN (
+            SELECT id FROM barbers WHERE barbershop_id=$1
+          ))
+          OR (n.recipient_type='customer' AND n.related_id IN (
+            SELECT id FROM appointments WHERE barbershop_id=$1
+            UNION SELECT id FROM promo_redemptions WHERE barbershop_id=$1
+          ))
+        ORDER BY n.id`],
+      ['customers', `SELECT c.id, c.name, c.email, c.phone, c.avatar_url, c.rating, c.no_show_count, c.created_at
+        FROM customers c WHERE c.id IN (
+          SELECT customer_id FROM appointments WHERE barbershop_id=$1 AND customer_id IS NOT NULL
+          UNION SELECT customer_id FROM ratings WHERE barbershop_id=$1 AND customer_id IS NOT NULL
+          UNION SELECT customer_id FROM customer_ratings WHERE barbershop_id=$1 AND customer_id IS NOT NULL
+          UNION SELECT customer_id FROM customer_shop_loyalty WHERE barbershop_id=$1
+          UNION SELECT customer_id FROM loyalty_transactions WHERE barbershop_id=$1 AND customer_id IS NOT NULL
+          UNION SELECT customer_id FROM promo_redemptions WHERE barbershop_id=$1 AND customer_id IS NOT NULL
+          UNION SELECT r.customer_id FROM barber_customer_ratings r
+            JOIN barbers b ON b.id=r.barber_id WHERE b.barbershop_id=$1 AND r.customer_id IS NOT NULL
+        ) ORDER BY c.id`],
+    ];
+    const records = {};
+    for (const [name, sql] of queries) {
+      const result = await client.query(sql, [req.user.id]);
+      records[name] = result.rows;
+    }
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+    const backup = {
+      format: 'smartcut-barbershop-backup',
+      version: 1,
+      generated_at: new Date().toISOString(),
+      barbershop: shopResult.rows[0],
+      records,
+    };
+    const filename = `${shopResult.rows[0].name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'barbershop'}-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.json(backup);
+  } catch (err) {
+    if (transactionStarted) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackErr) { console.error('Barbershop backup rollback failed:', rollbackErr); }
+    }
+    console.error('Barbershop backup failed:', err);
+    res.status(500).json({ message: 'Could not create the barbershop backup' });
+  } finally {
+    client?.release();
+  }
+});
+
+// AUTH: clear shop activity while retaining the shop, its barbers, and configuration
+router.post('/me/records/reset', authenticateBarbershop, async (req, res) => {
+  if (req.body?.confirm !== 'RESET') {
+    return res.status(400).json({ message: 'Confirmation text must be RESET' });
+  }
+
+  let client;
+  let transactionStarted = false;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+    const shopResult = await client.query(
+      'SELECT id FROM barbershops WHERE id=$1 FOR UPDATE',
+      [req.user.id]
+    );
+    if (!shopResult.rows.length) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ message: 'Barbershop not found' });
+    }
+
+    const barberResult = await client.query('SELECT id FROM barbers WHERE barbershop_id=$1', [req.user.id]);
+    const appointmentResult = await client.query('SELECT id FROM appointments WHERE barbershop_id=$1', [req.user.id]);
+    const ratedCustomersResult = await client.query(
+      `SELECT customer_id FROM barber_customer_ratings r
+       JOIN barbers b ON b.id=r.barber_id WHERE b.barbershop_id=$1
+       UNION SELECT customer_id FROM customer_ratings WHERE barbershop_id=$1`,
+      [req.user.id]
+    );
+    const barberIds = barberResult.rows.map(row => row.id);
+    const appointmentIds = appointmentResult.rows.map(row => row.id);
+    const ratedCustomerIds = [...new Set(ratedCustomersResult.rows.map(row => row.customer_id))];
+    const counts = {};
+
+    const notificationsResult = await client.query(
+      `DELETE FROM notifications
+       WHERE (recipient_type='barbershop' AND recipient_id=$1
+         AND type IN ('new_booking','payment_proof','review','promo_redeem'))
+         OR (recipient_type='barber' AND recipient_id=ANY($2::int[])
+           AND related_id=ANY($3::int[]) AND type='new_booking')
+         OR (recipient_type='customer' AND related_id=ANY($3::int[])
+           AND type IN ('payment_verified','no_show'))`,
+      [req.user.id, barberIds, appointmentIds]
+    );
+    counts.notifications = notificationsResult.rowCount;
+
+    const deletions = [
+      ['ratings', 'DELETE FROM ratings WHERE barbershop_id=$1'],
+      ['customer_ratings', 'DELETE FROM customer_ratings WHERE barbershop_id=$1'],
+      ['barber_customer_ratings', `DELETE FROM barber_customer_ratings
+        WHERE barber_id=ANY($1::int[])`],
+      ['walk_ins', 'DELETE FROM walk_ins WHERE barbershop_id=$1'],
+      ['appointments', 'DELETE FROM appointments WHERE barbershop_id=$1'],
+      ['promo_redemptions', 'DELETE FROM promo_redemptions WHERE barbershop_id=$1'],
+      ['loyalty_transactions', 'DELETE FROM loyalty_transactions WHERE barbershop_id=$1'],
+      ['customer_shop_loyalty', 'DELETE FROM customer_shop_loyalty WHERE barbershop_id=$1'],
+    ];
+    for (const [name, sql] of deletions) {
+      const result = name === 'barber_customer_ratings'
+        ? await client.query(sql, [barberIds])
+        : await client.query(sql, [req.user.id]);
+      counts[name] = result.rowCount;
+    }
+
+    await client.query('UPDATE barbershops SET rating=5.0 WHERE id=$1', [req.user.id]);
+    await client.query(
+      `UPDATE barbers b SET rating=COALESCE((
+        SELECT AVG(r.barber_rating)::numeric(3,2) FROM ratings r
+        WHERE r.barber_id=b.id AND r.barber_rating IS NOT NULL
+      ), 5.0), total_cuts=0 WHERE b.barbershop_id=$1`,
+      [req.user.id]
+    );
+    if (ratedCustomerIds.length) {
+      await client.query(
+        `UPDATE customers c SET rating=COALESCE((
+          SELECT AVG(remaining.rating)::numeric(3,2) FROM (
+            SELECT rating FROM barber_customer_ratings WHERE customer_id=c.id
+            UNION ALL
+            SELECT rating FROM customer_ratings WHERE customer_id=c.id
+          ) remaining
+        ), 5.0) WHERE c.id=ANY($1::int[])`,
+        [ratedCustomerIds]
+      );
+    }
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+    res.json({ message: 'Shop records reset successfully', deleted: counts });
+  } catch (err) {
+    if (transactionStarted) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackErr) { console.error('Barbershop records reset rollback failed:', rollbackErr); }
+    }
+    console.error('Barbershop records reset failed:', err);
+    res.status(500).json({ message: 'Could not reset the barbershop records' });
+  } finally {
+    client?.release();
+  }
+});
+
 // AUTH: update profile (basic info only)
 router.put('/me/profile', authenticateBarbershop, async (req, res) => {
   try {

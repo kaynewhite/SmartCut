@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import {
   Upload, Image, Settings2, Plus, Trash2, QrCode, ToggleLeft, ToggleRight,
   MapPin, CreditCard, CheckCircle, Clock, MessageSquare, Gift,
-  ShieldAlert, Send, Lock, User, ChevronRight, Scissors
+  ShieldAlert, Send, Lock, User, ChevronRight, Scissors, Database, Download, RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import styles from './Settings.module.css';
@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   { key: 'media',        icon: Image,         label: 'Logo & Media' },
   { key: 'payments',     icon: QrCode,        label: 'Payment Methods' },
   { key: 'loyalty',      icon: Gift,          label: 'Loyalty Points' },
+  { key: 'backup',       icon: Database,      label: 'Backup & Reset' },
   { key: 'security',     icon: Lock,          label: 'Security' },
   { key: 'subscription', icon: CreditCard,    label: 'Subscription' },
   { key: 'feedback',     icon: MessageSquare, label: 'Feedback' },
@@ -67,6 +68,8 @@ export default function BarbershopSettings() {
 
   const [loyaltyForm, setLoyaltyForm] = useState({ loyalty_points_per_appointment: 1, loyalty_streak_bonus: 0, loyalty_streak_every: 5 });
   const [savingLoyalty, setSavingLoyalty] = useState(false);
+  const [backupDownloaded, setBackupDownloaded] = useState(false);
+  const [resettingRecords, setResettingRecords] = useState(false);
 
   const [appealText, setAppealText] = useState('');
   const [submittingAppeal, setSubmittingAppeal] = useState(false);
@@ -179,6 +182,41 @@ export default function BarbershopSettings() {
     try { await api.put('/barbershops/me/loyalty-settings', loyaltyForm); toast.success('Loyalty settings saved!'); }
     catch { toast.error('Failed to save loyalty settings'); }
     finally { setSavingLoyalty(false); }
+  };
+
+  const downloadRecordsBackup = async () => {
+    try {
+      const response = await api.get('/barbershops/me/records/backup', { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `smartcut-barbershop-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupDownloaded(true);
+      toast.success('Backup downloaded');
+    } catch {
+      toast.error('Failed to download the records backup');
+    }
+  };
+
+  const resetRecords = async () => {
+    if (!backupDownloaded) return toast.error('Download a backup before resetting records');
+    const confirmation = window.prompt('This permanently deletes this shop’s appointments, walk-ins, reviews, promo redemptions, and loyalty history. Type RESET to continue.');
+    if (confirmation !== 'RESET') return;
+
+    setResettingRecords(true);
+    try {
+      await api.post('/barbershops/me/records/reset', { confirm: confirmation });
+      setBackupDownloaded(false);
+      toast.success('Shop records reset. Barbers and shop settings were kept.');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to reset shop records');
+    } finally {
+      setResettingRecords(false);
+    }
   };
 
   const handleAppeal = async (e) => {
@@ -313,10 +351,9 @@ export default function BarbershopSettings() {
           <nav className={styles.sidebar}>
             {NAV_ITEMS.map((n, i) => {
               const Icon = n.icon;
-              const isDiv = i === 6; // divider before Security
               return (
                 <div key={n.key}>
-                  {i === 6 && <div className={styles.navDivider} />}
+                  {i === 7 && <div className={styles.navDivider} />}
                   <button
                     className={`${styles.navItem} ${active === n.key ? styles.active : ''}`}
                     onClick={() => setActive(n.key)}
@@ -500,6 +537,34 @@ export default function BarbershopSettings() {
                   )}
                   <button className={styles.saveBtn} type="submit" disabled={savingLoyalty}>{savingLoyalty ? 'Saving...' : 'Save Loyalty Settings'}</button>
                 </form>
+              </div>
+            )}
+
+            {/* ── BACKUP & RESET ── */}
+            {active === 'backup' && (
+              <div className={styles.section}>
+                <h2><Database size={17} /> Backup & Reset</h2>
+                <p className={styles.sectionDesc}>Download a JSON backup before clearing this shop’s activity records.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ padding: 16, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                    <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>Included in the backup</strong>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.6, margin: '7px 0 0' }}>
+                      Shop profile, barbers, services, payment methods, promos, appointments, walk-ins, reviews, loyalty history, redemptions, and related customer records.
+                    </p>
+                  </div>
+                  <button type="button" className={styles.saveBtn} onClick={downloadRecordsBackup} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: 'fit-content' }}>
+                    <Download size={15} /> Download Backup
+                  </button>
+                  <div style={{ padding: 16, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 10 }}>
+                    <strong style={{ color: '#ef4444', fontSize: 13 }}>Reset shop records</strong>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.6, margin: '7px 0 14px' }}>
+                      This clears appointments, walk-ins, reviews and ratings, promo redemptions, loyalty balances and transactions, and related notifications. Your shop, barbers, customer accounts, services, promos, payment methods, and settings are kept. Download a backup first; this cannot be undone.
+                    </p>
+                    <button type="button" className={styles.dangerBtn} onClick={resetRecords} disabled={!backupDownloaded || resettingRecords} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, opacity: !backupDownloaded || resettingRecords ? 0.55 : 1 }}>
+                      <RotateCcw size={14} />{resettingRecords ? 'Resetting...' : 'Reset Records'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

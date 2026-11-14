@@ -149,6 +149,12 @@ export default function BarbershopAppointments() {
                         <span style={{ fontSize: 11, color: '#3b82f6', padding: '1px 7px', background: 'rgba(59,130,246,0.1)', borderRadius: 4 }}>In-Store</span>
                       )}
                     </div>
+                    {a.promo_name && (
+                      <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.25)', color: '#d4af37', fontSize: 12 }}>
+                        Promo: <strong>{a.promo_name}</strong> · {a.promo_points_spent} points
+                        {a.redemption_code && <span> · Redemption code: <strong>{a.redemption_code}</strong></span>}
+                      </div>
+                    )}
                     {a.is_home_service && (
                       <div className={styles.notes}>
                         {a.home_contact_name && <div>Contact: {a.home_contact_name}{a.home_contact_phone ? ` · ${a.home_contact_phone}` : ''}</div>}

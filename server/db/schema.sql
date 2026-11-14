@@ -260,6 +260,7 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (
   promo_value NUMERIC(10,2) NOT NULL DEFAULT 0,
   redemption_code TEXT,
   status TEXT DEFAULT 'pending',
+  appointment_id INTEGER,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

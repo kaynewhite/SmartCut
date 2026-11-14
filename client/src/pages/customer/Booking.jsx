@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../utils/api';
 import Layout from '../../components/Layout';
 import toast from 'react-hot-toast';
@@ -23,6 +23,8 @@ function TimeSlot({ time, booked, selected, onClick }) {
 export default function CustomerBooking() {
   const { shopId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const promoId = searchParams.get('promo');
   const { user } = useAuth();
 
   const [step, setStep] = useState(0);
@@ -32,6 +34,9 @@ export default function CustomerBooking() {
   const [bookedSlots, setBookedSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [promo, setPromo] = useState(null);
+  const [promoBalance, setPromoBalance] = useState(null);
+  const [promoError, setPromoError] = useState('');
 
   const [selectedBarber, setSelectedBarber] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
@@ -53,11 +58,17 @@ export default function CustomerBooking() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [shopRes, barberRes, pmRes, customerRes] = await Promise.all([
+        const [shopRes, barberRes, pmRes, customerRes, promosRes, balanceRes] = await Promise.all([
           api.get(`/barbershops/${shopId}`),
           api.get('/barbers', { params: { barbershop_id: shopId } }),
           api.get(`/payment-methods/${shopId}`).catch(() => ({ data: [] })),
-          api.get('/customers/me').catch(() => ({ data: null }))
+          api.get('/customers/me').catch(() => ({ data: null })),
+          promoId
+            ? api.get('/loyalty-promos', { params: { barbershop_id: shopId } })
+            : Promise.resolve({ data: [] }),
+          promoId
+            ? api.get(`/loyalty-promos/balance/${shopId}`)
+            : Promise.resolve({ data: null })
         ]);
         setShop(shopRes.data.shop);
         const avail = (barberRes.data || []).filter(b => b.is_available);
@@ -65,18 +76,56 @@ export default function CustomerBooking() {
         setShopPayMethods(pmRes.data || []);
         setHomeContactName(customerRes.data?.name || user?.name || '');
         setHomeContactPhone(customerRes.data?.phone || user?.phone || '');
-      } catch { toast.error('Could not load barbershop info'); }
+        if (promoId) {
+          const selectedPromo = (promosRes.data || []).find(item => String(item.id) === promoId);
+          if (!selectedPromo) {
+            setPromoError('This promo is no longer available. Return to the shop and choose another promo.');
+          } else {
+            setPromo(selectedPromo);
+            const balance = Number(balanceRes.data?.points || 0);
+            setPromoBalance(balance);
+            setBookingAtHome(false);
+            if (balance < selectedPromo.points_cost) {
+              setPromoError(`You need ${selectedPromo.points_cost} points for this promo, but have ${balance}.`);
+            }
+            if (selectedPromo.barber_id) {
+              const assignedBarber = avail.find(barber => String(barber.id) === String(selectedPromo.barber_id));
+              if (assignedBarber) setSelectedBarber(assignedBarber);
+              else setPromoError('The barber assigned to this promo is currently unavailable. Please try again later.');
+            }
+          }
+        }
+      } catch {
+        toast.error('Could not load barbershop info');
+        if (promoId) setPromoError('Could not load this promo. Please return to the shop and try again.');
+      }
       setLoading(false);
     };
     load();
-  }, [shopId, user?.name, user?.phone]);
+  }, [shopId, user?.name, user?.phone, promoId]);
 
   useEffect(() => {
     if (!selectedBarber) { setServices([]); return; }
+    let active = true;
     api.get(`/services/by-barber/${selectedBarber.id}`)
-      .then(res => setServices(res.data || []))
-      .catch(() => setServices([]));
-  }, [selectedBarber]);
+      .then(res => {
+        if (!active) return;
+        const barberServices = res.data || [];
+        setServices(barberServices);
+        if (promo?.service_id) {
+          const rewardService = barberServices.find(service => String(service.id) === String(promo.service_id));
+          if (rewardService) setSelectedService(rewardService);
+          else setPromoError('The reward service is no longer offered by this barber.');
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setServices([]);
+          if (promo?.service_id) setPromoError('Could not load the promo reward service.');
+        }
+      });
+    return () => { active = false; };
+  }, [selectedBarber, promo?.id]);
 
   useEffect(() => {
     if (!selectedDate || (bookingAtHome && homeServiceType === 'event')) {
@@ -149,9 +198,13 @@ export default function CustomerBooking() {
   ];
   const currentStep = steps[step]?.key;
   const confirmStep = steps.length - 1;
-  const availableServices = bookingAtHome && !isEventBooking
+  const bookableBarbers = barbers.filter(barber =>
+    (!promo?.barber_id || String(barber.id) === String(promo.barber_id)) &&
+    (!promo?.service_id || (barber.services || []).some(service => String(service.id) === String(promo.service_id)))
+  );
+  const availableServices = (bookingAtHome && !isEventBooking
     ? services.filter(service => service.is_home_service)
-    : services;
+    : services).filter(service => !promo?.service_id || String(service.id) === String(promo.service_id));
 
   const canProceed = () => {
     if (currentStep === 'location') return bookingAtHome !== null;
@@ -169,6 +222,14 @@ export default function CustomerBooking() {
   };
 
   const handleBook = async () => {
+    if (promoError) {
+      toast.error(promoError);
+      return;
+    }
+    if (promo && (promoBalance === null || promoBalance < promo.points_cost)) {
+      toast.error('Your points balance is not enough for this promo.');
+      return;
+    }
     if (bookingAtHome && (!homeContactName.trim() || !homeContactPhone.trim() || !homeAddress.trim())) {
       toast.error('Enter your name, phone number, and home-service address');
       return;
@@ -182,6 +243,7 @@ export default function CustomerBooking() {
       const res = await api.post('/appointments', {
         barbershop_id: shopId, barber_id: selectedBarber?.id,
         service_id: isEventBooking ? null : selectedService?.id, appointment_date: selectedDate,
+        promo_id: promo?.id || null,
         appointment_time: isEventBooking ? null : selectedTime + ':00', notes,
         is_home_service: bookingAtHome,
         home_service_type: bookingAtHome ? homeServiceType : null,
@@ -196,7 +258,10 @@ export default function CustomerBooking() {
         if (paymentMethod) fd.append('payment_method', paymentMethod);
         await api.post(`/appointments/${res.data.id}/payment-proof`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).catch(() => {});
       }
-      toast.success('Appointment booked successfully!');
+      const redemptionCode = res.data.promo_redemption?.redemption_code;
+      toast.success(redemptionCode
+        ? `Appointment booked with ${promo.name}! Code: ${redemptionCode}`
+        : 'Appointment booked successfully!');
       navigate('/customer/appointments');
     } catch (err) { toast.error(err.response?.data?.message || 'Booking failed'); }
     finally { setSubmitting(false); }
@@ -216,6 +281,14 @@ export default function CustomerBooking() {
         <div style={{ marginBottom: 22 }}>
           <h1 style={{ color: '#f0f0f0', fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>Book Appointment</h1>
           <p style={{ color: '#8b92a9', fontSize: 13, margin: 0 }}>at <strong style={{ color: '#d4af37' }}>{shop.name}</strong></p>
+          {promo && (
+            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.08)', border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37', fontSize: 13 }}>
+              <strong>{promo.name}</strong> · {promo.points_cost} points{promo.service_name ? ` · ${promo.service_name}` : ''}
+              <div style={{ marginTop: 4, color: promoError ? '#ef4444' : '#8b92a9', fontSize: 12 }}>
+                {promoError || `Your balance: ${promoBalance} points. Points are used only after the appointment is booked.`}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', marginTop: 16, borderRadius: 10, overflow: 'hidden', border: '1px solid #1e2a3a' }}>
             {steps.map((s, i) => (
@@ -237,10 +310,12 @@ export default function CustomerBooking() {
               <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Where would you like your appointment?</h2>
               <p style={{ color: '#8b92a9', fontSize: 12, margin: '0 0 16px' }}>Choose how you want to receive this service.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                {[
+                {(promo ? [
+                  { home: false, icon: <Scissors size={22} />, title: 'At the barbershop', description: 'This reward is booked at the shop.' }
+                ] : [
                   { home: false, icon: <Scissors size={22} />, title: 'At the barbershop', description: 'Visit the shop for your appointment.' },
                   { home: true, icon: <Home size={22} />, title: 'Home service', description: 'Have the barber come to your address.' }
-                ].map(option => (
+                ]).map(option => (
                   <button key={String(option.home)} type="button" onClick={() => {
                     setBookingAtHome(option.home);
                     setHomeServiceType(null);
@@ -303,16 +378,16 @@ export default function CustomerBooking() {
               <h2 style={{ color: '#f0f0f0', fontSize: 16, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <User size={16} color="#d4af37" /> Choose Your Barber
               </h2>
-              <p style={{ color: '#8b92a9', fontSize: 12, margin: '0 0 16px' }}>Only available barbers are shown</p>
-              {barbers.length === 0 ? (
+              <p style={{ color: '#8b92a9', fontSize: 12, margin: '0 0 16px' }}>{promo?.barber_id ? 'This reward is assigned to a specific barber.' : 'Only available barbers are shown'}</p>
+              {bookableBarbers.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                   <Scissors size={40} color="#374151" style={{ marginBottom: 14 }} />
-                  <div style={{ color: '#f0f0f0', fontSize: 15, fontWeight: 500 }}>No barbers available right now</div>
-                  <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 6 }}>All barbers at this shop are currently unavailable. Please check back later.</div>
+                  <div style={{ color: '#f0f0f0', fontSize: 15, fontWeight: 500 }}>{promo ? 'No barber is currently available for this reward' : 'No barbers available right now'}</div>
+                  <div style={{ color: '#8b92a9', fontSize: 13, marginTop: 6 }}>Please check back later or contact the shop.</div>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
-                  {barbers.map(b => (
+                  {bookableBarbers.map(b => (
                   <div key={b.id} onClick={() => { setSelectedBarber(b); setSelectedService(null); setSelectedDate(''); setSelectedTime(''); }} style={{
                       padding: 14, borderRadius: 10, border: `1.5px solid ${selectedBarber?.id === b.id ? '#d4af37' : '#1e2a3a'}`,
                       background: selectedBarber?.id === b.id ? 'rgba(212,175,55,0.08)' : '#0a1020',
@@ -496,7 +571,8 @@ export default function CustomerBooking() {
                   ['Shop', shop.name],
                   ['Barber', selectedBarber?.name],
                   ['Service', isEventBooking ? 'Full-day event booking' : selectedService?.name],
-                  ['Price', `₱${Number(isEventBooking ? selectedBarber?.event_price : selectedService?.price || 0).toFixed(2)}`],
+                  ['Price', promo ? `Covered by ${promo.points_cost} points` : `₱${Number(isEventBooking ? selectedBarber?.event_price : selectedService?.price || 0).toFixed(2)}`],
+                  ...(promo ? [['Promo', promo.name]] : []),
                   ...(bookingAtHome ? [['Booking Type', 'Home Service']] : []),
                   ...(isEventBooking ? [['Home Service Type', 'Event (full day)']] : []),
                   ...(bookingAtHome ? [['Contact', homeContactName], ['Phone', homeContactPhone]] : []),
@@ -520,7 +596,7 @@ export default function CustomerBooking() {
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Special requests..." style={{ width: '100%', background: '#0a1020', border: '1px solid #1e2a3a', color: '#f0f0f0', padding: '10px 12px', borderRadius: 8, fontSize: 13, resize: 'none', boxSizing: 'border-box' }} />
               </div>
 
-              <div style={{ background: 'rgba(212,175,55,0.05)', border: '1px solid rgba(212,175,55,0.2)', borderRadius: 10, padding: 14 }}>
+              {!promo && <div style={{ background: 'rgba(212,175,55,0.05)', border: '1px solid rgba(212,175,55,0.2)', borderRadius: 10, padding: 14 }}>
                 <div style={{ color: '#d4af37', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>💳 Upload Payment (Optional)</div>
                 <div style={{ color: '#8b92a9', fontSize: 12, marginBottom: 10 }}>Scan the shop's payment QR and upload proof to get confirmed faster.</div>
                 {shopPayMethods.filter(p => p.is_active && p.qr_code_url).length > 0 && (
@@ -536,7 +612,7 @@ export default function CustomerBooking() {
                   {proofFile ? `✓ ${proofFile.name}` : 'Upload payment receipt'}
                   <input type="file" accept="image/*" onChange={e => setProofFile(e.target.files[0])} style={{ display: 'none' }} />
                 </label>
-              </div>
+              </div>}
 
               <div style={{ marginTop: 14, background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, padding: 12 }}>
                 <div style={{ display: 'flex', gap: 8, color: '#6366f1', fontSize: 12, lineHeight: 1.6 }}>
